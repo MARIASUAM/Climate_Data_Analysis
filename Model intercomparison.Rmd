@@ -1,0 +1,548 @@
+---
+title: "Model intercomparison"
+output: html_document
+---
+
+# Setting up
+
+Load libraries:
+```{r}
+# install.packages("chron")
+library(chron)
+# install.packages("RColorBrewer")
+library(RColorBrewer)
+library(lattice)
+# install.packages("ncdf4")
+library(ncdf4)
+# install.packages("ncdf4.helpers")
+library(ncdf4.helpers)
+library(dplyr)
+library(ggplot2)
+library(reshape2)
+library(raster)
+```
+
+Set working directory:
+```{r}
+path <- "D:/Maria/Proyectos/ECOPOTENTIAL_FUTURE_PROJECTIONS/Outputs_201807/" # María
+# path <- "..." # Ricardo
+list.files(path = path)
+```
+
+Define functions used along the code:
+```{r}
+stderr <- function(x) {sd(x)/sqrt(length(x))}
+cv <- function(x) {sd(x)/mean(x)}
+```
+
+
+# Temperature analysis
+
+*Data description*
+
+  Grid description: 145 (lon) x 66 (lat)
+  
+  Period: 1970-2006 = 36 years
+  
+  Datasets (x5 models):
+    
+    yearmean  -> 36 slices (1970, 1971, ... 2005)
+    
+    (season)_mean -> 36 slices (summer 1970, summer 1971, ... summer 2005)
+    
+    monmean   -> 36 x 12 = 432 slices (Jan 1970, Feb 1970, ... Dec 2005)
+    
+    daymin -> 
+    
+    daymax -> as daymin
+    
+## Yearmean analysis
+
+Each season .nc file contains the yearly mean mean of the historical period (1970-2006), i.e. 36 slices
+
+File names:
+```{r}
+CNRM <- "temp_CNRM_historical_yearmean.nc"
+ICHEC <- "temp_ICHEC_historical_yearmean.nc"
+IPSL <- "temp_IPSL_historical_yearmean.nc"
+MOHC <- "temp_MOHC_historical_yearmean.nc"
+MPI <-  "temp_MPI_historical_yearmean.nc"
+```
+
+Select each layer (t = 1, t = 2, ...) of each stack (cnrm, ichec, ipsl, mohc, mpi) and stack with each other, giving 36 stacks (t1,...t36)
+```{r}
+for (i in 1:36) {
+  cnrm <- raster(paste(path, CNRM, sep = ""), band = i, varname = "tas")
+  ichec <- raster(paste(path, ICHEC, sep = ""), band = i, varname = "tas")
+  ipsl <- raster(paste(path, IPSL, sep = ""), band = i, varname = "tas")
+  mohc <- raster(paste(path, MOHC, sep = ""), band = i, varname = "tas")
+  mpi <- raster(paste(path, MPI, sep = ""), band = i, varname = "tas")
+  
+  assign(paste('year_',i,sep=''), stack(cnrm, ichec, ipsl, mohc, mpi))
+}
+```
+
+Calculate metrics as rasters (mean, std.dev, std.error, cv,...) for a given time step:
+
+*Set time step to calculate: define by the user!*
+```{r}
+data <- year_30
+time <- 30
+```
+
+Calculate and plot:
+```{r}
+mean_data <- calc(data, fun = mean)
+plot(mean_data, main = paste("Mean of yearly mean temperature across models at t = ", time, sep = ""), xlab = "Longitude (º)", ylab = "Latitude (º)")
+
+stddev_data <- calc(data, fun = sd)
+plot(stddev_data, main = paste("Standard deviation of yearly mean temperature across models at t = ", time, sep = ""), xlab = "Longitude", ylab = "Latitude")
+
+stderr_data <- calc(data, fun = stderr)
+plot(stderr_data, main = paste("Standard error of yearly mean temperature across models at t = ", time, sep = ""), xlab = "Longitude", ylab = "Latitude")
+
+cv_data <- calc(data, fun = cv)
+plot(cv_data, main = paste("Coefficient of variation of yearly mean temperature across models at t = ", time, sep = ""), xlab = "Longitude", ylab = "Latitude")
+```
+
+## Seasonal analysis
+
+Each season .nc file contains the season mean of the historical period (1970-2006), i.e. 36 slices
+
+### Summer
+
+File names:
+```{r}
+CNRM <- "temp_CNRM_historical_summer_mean.nc"
+ICHEC <- "temp_ICHEC_historical_summer_mean.nc"
+IPSL <- "temp_IPSL_historical_summer_mean.nc"
+MOHC <- "temp_MOHC_historical_summer_mean.nc"
+MPI <-  "temp_MPI_historical_summer_mean.nc"
+```
+
+Generate raster layers
+```{r}
+for (i in 1:36) {
+  cnrm <- raster(paste(path, CNRM, sep = ""), band = i, varname = "tas")
+  ichec <- raster(paste(path, ICHEC, sep = ""), band = i, varname = "tas")
+  ipsl <- raster(paste(path, IPSL, sep = ""), band = i, varname = "tas")
+  mohc <- raster(paste(path, MOHC, sep = ""), band = i, varname = "tas")
+  mpi <- raster(paste(path, MPI, sep = ""), band = i, varname = "tas")
+  
+  assign(paste('summer_',i,sep=''), stack(cnrm, ichec, ipsl, mohc, mpi))
+}
+```
+
+Calculate metrics as rasters (mean, std.dev, std.error, cv,...)
+
+*Set time step to calculate: define by the user!*
+```{r}
+data <- summer_30
+time <- 30
+```
+
+Calculate and plot:
+```{r}
+mean_data <- calc(data, fun = mean)
+plot(mean_data, main = paste("Mean of summer mean temperature across models at t = ", time, sep = ""), xlab = "Longitude (º)", ylab = "Latitude (º)")
+
+stddev_data <- calc(data, fun = sd)
+plot(stddev_data, main = paste("Standard deviation of summer mean temperature across models at t = ", time, sep = ""), xlab = "Longitude", ylab = "Latitude")
+
+stderr_data <- calc(data, fun = stderr)
+plot(stderr_data, main = paste("Standard error of summer mean temperature across models at t = ", time, sep = ""), xlab = "Longitude", ylab = "Latitude")
+
+cv_data <- calc(data, fun = cv)
+plot(cv_data, main = paste("Coefficient of variation of summer mean temperature across models at t = ", time, sep = ""), xlab = "Longitude", ylab = "Latitude")
+```
+
+
+### Fall
+
+File names:
+```{r}
+CNRM <- "temp_CNRM_historical_fall_mean.nc"
+ICHEC <- "temp_ICHEC_historical_fall_mean.nc"
+IPSL <- "temp_IPSL_historical_fall_mean.nc"
+MOHC <- "temp_MOHC_historical_fall_mean.nc"
+MPI <-  "temp_MPI_historical_fall_mean.nc"
+```
+
+Generate raster layers
+```{r}
+for (i in 1:36) {
+  cnrm <- raster(paste(path, CNRM, sep = ""), band = i, varname = "tas")
+  ichec <- raster(paste(path, ICHEC, sep = ""), band = i, varname = "tas")
+  ipsl <- raster(paste(path, IPSL, sep = ""), band = i, varname = "tas")
+  mohc <- raster(paste(path, MOHC, sep = ""), band = i, varname = "tas")
+  mpi <- raster(paste(path, MPI, sep = ""), band = i, varname = "tas")
+  
+  assign(paste('fall_',i,sep=''), stack(cnrm, ichec, ipsl, mohc, mpi))
+}
+```
+
+Calculate metrics as rasters (mean, std.dev, std.error, cv,...)
+
+*Set time step to calculate: define by the user!*
+```{r}
+data <- fall_30
+time <- 30
+```
+
+Calculate and plot:
+```{r}
+mean_data <- calc(data, fun = mean)
+plot(mean_data, main = paste("Mean of fall mean temperature across models at t = ", time, sep = ""), xlab = "Longitude (º)", ylab = "Latitude (º)")
+
+stddev_data <- calc(data, fun = sd)
+plot(stddev_data, main = paste("Standard deviation of fall mean temperature across models at t = ", time, sep = ""), xlab = "Longitude", ylab = "Latitude")
+
+stderr_data <- calc(data, fun = stderr)
+plot(stderr_data, main = paste("Standard error of fall mean temperature across models at t = ", time, sep = ""), xlab = "Longitude", ylab = "Latitude")
+
+cv_data <- calc(data, fun = cv)
+plot(cv_data, main = paste("Coefficient of variation of fall mean temperature across models at t = ", time, sep = ""), xlab = "Longitude", ylab = "Latitude")
+```
+
+### Winter
+
+File names:
+```{r}
+CNRM <- "temp_CNRM_historical_winter_mean.nc"
+ICHEC <- "temp_ICHEC_historical_winter_mean.nc"
+IPSL <- "temp_IPSL_historical_winter_mean.nc"
+MOHC <- "temp_MOHC_historical_winter_mean.nc"
+MPI <-  "temp_MPI_historical_winter_mean.nc"
+```
+
+Generate raster layers
+```{r}
+for (i in 1:36) {
+  cnrm <- raster(paste(path, CNRM, sep = ""), band = i, varname = "tas")
+  ichec <- raster(paste(path, ICHEC, sep = ""), band = i, varname = "tas")
+  ipsl <- raster(paste(path, IPSL, sep = ""), band = i, varname = "tas")
+  mohc <- raster(paste(path, MOHC, sep = ""), band = i, varname = "tas")
+  mpi <- raster(paste(path, MPI, sep = ""), band = i, varname = "tas")
+  
+  assign(paste('winter_',i,sep=''), stack(cnrm, ichec, ipsl, mohc, mpi))
+}
+```
+
+Calculate metrics as rasters (mean, std.dev, std.error, cv,...)
+
+*Set time step to calculate: define by the user!*
+```{r}
+data <- winter_30
+time <- 30
+```
+
+Calculate and plot:
+```{r}
+mean_data <- calc(data, fun = mean)
+plot(mean_data, main = paste("Mean of winter mean temperature across models at t = ", time, sep = ""), xlab = "Longitude (º)", ylab = "Latitude (º)")
+
+stddev_data <- calc(data, fun = sd)
+plot(stddev_data, main = paste("Standard deviation of winter mean temperature across models at t = ", time, sep = ""), xlab = "Longitude", ylab = "Latitude")
+
+stderr_data <- calc(data, fun = stderr)
+plot(stderr_data, main = paste("Standard error of winter mean temperature across models at t = ", time, sep = ""), xlab = "Longitude", ylab = "Latitude")
+
+cv_data <- calc(data, fun = cv)
+plot(cv_data, main = paste("Coefficient of variation of winter mean temperature across models at t = ", time, sep = ""), xlab = "Longitude", ylab = "Latitude")
+```
+
+### Spring
+
+File names:
+```{r}
+CNRM <- "temp_CNRM_historical_spring_mean.nc"
+ICHEC <- "temp_ICHEC_historical_spring_mean.nc"
+IPSL <- "temp_IPSL_historical_spring_mean.nc"
+MOHC <- "temp_MOHC_historical_spring_mean.nc"
+MPI <-  "temp_MPI_historical_spring_mean.nc"
+```
+
+Generate raster layers
+```{r}
+for (i in 1:36) {
+  cnrm <- raster(paste(path, CNRM, sep = ""), band = i, varname = "tas")
+  ichec <- raster(paste(path, ICHEC, sep = ""), band = i, varname = "tas")
+  ipsl <- raster(paste(path, IPSL, sep = ""), band = i, varname = "tas")
+  mohc <- raster(paste(path, MOHC, sep = ""), band = i, varname = "tas")
+  mpi <- raster(paste(path, MPI, sep = ""), band = i, varname = "tas")
+  
+  assign(paste('spring_',i,sep=''), stack(cnrm, ichec, ipsl, mohc, mpi))
+}
+```
+
+Calculate metrics as rasters (mean, std.dev, std.error, cv,...)
+
+*Set time step to calculate: define by the user!*
+```{r}
+data <- spring_30
+time <- 30
+```
+
+Calculate and plot:
+```{r}
+mean_data <- calc(data, fun = mean)
+plot(mean_data, main = paste("Mean of spring mean temperature across models at t = ", time, sep = ""), xlab = "Longitude (º)", ylab = "Latitude (º)")
+
+stddev_data <- calc(data, fun = sd)
+plot(stddev_data, main = paste("Standard deviation of spring mean temperature across models at t = ", time, sep = ""), xlab = "Longitude", ylab = "Latitude")
+
+stderr_data <- calc(data, fun = stderr)
+plot(stderr_data, main = paste("Standard error of spring mean temperature across models at t = ", time, sep = ""), xlab = "Longitude", ylab = "Latitude")
+
+cv_data <- calc(data, fun = cv)
+plot(cv_data, main = paste("Coefficient of variation of spring mean temperature across models at t = ", time, sep = ""), xlab = "Longitude", ylab = "Latitude")
+```
+
+## Monthly analysis
+
+In this case, to avoid creating so many stacks, the specific month to be compared is calculated upon request by the user, instead of all months of the simulation.
+
+Each .nc file contains the monthly means of the historical period (1970-2006), i.e. 12 months * 36 years = 432 slices.
+
+File names:
+```{r}
+CNRM <- "temp_CNRM_historical_monmean.nc"
+ICHEC <- "temp_ICHEC_historical_monmean.nc"
+IPSL <- "temp_IPSL_historical_monmean.nc"
+MOHC <- "temp_MOHC_historical_monmean.nc"
+MPI <-  "temp_MPI_historical_monmean.nc"
+```
+
+Generate raster layers
+```{r}
+cnrm <- brick(paste(path, CNRM, sep = ""), varname = "tas")
+ichec <- brick(paste(path, ICHEC, sep = ""), varname = "tas")
+ipsl <- brick(paste(path, IPSL, sep = ""), varname = "tas")
+mohc <- brick(paste(path, MOHC, sep = ""), varname = "tas")
+mpi <- brick(paste(path, MPI, sep = ""), varname = "tas")
+```
+
+*Set time step to calculate: define by the user!*
+```{r}
+time <- 300
+```
+
+Generate raster layers, calculate and plot
+```{r}
+cnrm_layer <- raster(cnrm, layer = time)
+ichec_layer <- raster(ichec, layer = time)
+ipsl_layer <- raster(ipsl, layer = time)
+mohc_layer <- raster(mohc, layer = time)
+mpi_layer <- raster(mpi, layer = time)
+
+data <- assign(paste('month_', time, sep=''), stack(cnrm_layer, ichec_layer, ipsl_layer, mohc_layer, mpi_layer))
+
+mean_data <- calc(data, fun = mean)
+plot(mean_data, main = paste("Mean of monthly mean temperature across models at t = ", time, sep = ""), xlab = "Longitude (º)", ylab = "Latitude (º)")
+stddev_data <- calc(data, fun = sd)
+plot(stddev_data, main = paste("Standard deviation of monthly mean temperature across models at t = ", time, sep = ""), xlab = "Longitude", ylab = "Latitude")
+stderr_data <- calc(data, fun = stderr)
+plot(stderr_data, main = paste("Standard error of monthly mean temperature across models at t = ", time, sep = ""), xlab = "Longitude", ylab = "Latitude")
+cv_data <- calc(data, fun = cv)
+plot(cv_data, main = paste("Coefficient of variation of monthly mean temperature across models at t = ", time, sep = ""), xlab = "Longitude", ylab = "Latitude")
+```
+
+
+## Daily analysis
+
+Each daily .nc file contains the daymin or daymax of the historical period (1970-2006), i.e. (36 * 365) + leap years = 13149 slices
+
+In this case, again to avoid creating so many stacks, the specific day to be compared is calculated upon request by the user, instead of all days of the simulation.
+
+### Daymin
+
+File names:
+```{r}
+CNRM <- "temp_CNRM_historical_daymin.nc"
+ICHEC <- "temp_ICHEC_historical_daymin.nc"
+IPSL <- "temp_IPSL_historical_daymin.nc"
+MOHC <- "temp_MOHC_historical_daymin.nc"
+MPI <-  "temp_MPI_historical_daymin.nc"
+```
+
+Generate raster bricks:
+```{r}
+cnrm <- brick(paste(path, CNRM, sep = ""), varname = "tas")
+ichec <- brick(paste(path, ICHEC, sep = ""), varname = "tas")
+ipsl <- brick(paste(path, IPSL, sep = ""), varname = "tas")
+mohc <- brick(paste(path, MOHC, sep = ""), varname = "tas")
+mpi <- brick(paste(path, MPI, sep = ""), varname = "tas")
+```
+
+*Set time step (day within the simulation, from 1 to 13149) to calculate: define by the user!*
+```{r}
+time <- 13149
+```
+
+Generate raster layers, calculate and plot
+```{r}
+cnrm_layer <- raster(cnrm, layer = time)
+ichec_layer <- raster(ichec, layer = time)
+ipsl_layer <- raster(ipsl, layer = time)
+mohc_layer <- raster(mohc, layer = time)
+mpi_layer <- raster(mpi, layer = time)
+
+data <- assign(paste('day_', time, sep=''), stack(cnrm_layer, ichec_layer, ipsl_layer, mohc_layer, mpi_layer))
+
+mean_data <- calc(data, fun = mean)
+plot(mean_data, main = paste("Mean of daily minimum temperature across models at t = ", time, sep = ""), xlab = "Longitude (º)", ylab = "Latitude (º)")
+stddev_data <- calc(data, fun = sd)
+plot(stddev_data, main = paste("Standard deviation of daily minimum temperature across models at t = ", time, sep = ""), xlab = "Longitude", ylab = "Latitude")
+stderr_data <- calc(data, fun = stderr)
+plot(stderr_data, main = paste("Standard error of daily minimum temperature across models at t = ", time, sep = ""), xlab = "Longitude", ylab = "Latitude")
+cv_data <- calc(data, fun = cv)
+plot(cv_data, main = paste("Coefficient of variation of daily minimum temperature across models at t = ", time, sep = ""), xlab = "Longitude", ylab = "Latitude")
+```
+
+
+### Daymax
+
+File names:
+```{r}
+CNRM <- "temp_CNRM_historical_daymax.nc"
+ICHEC <- "temp_ICHEC_historical_daymax.nc"
+IPSL <- "temp_IPSL_historical_daymax.nc"
+MOHC <- "temp_MOHC_historical_daymax.nc"
+MPI <-  "temp_MPI_historical_daymax.nc"
+```
+
+Generate raster bricks:
+```{r}
+cnrm <- brick(paste(path, CNRM, sep = ""), varname = "tas")
+ichec <- brick(paste(path, ICHEC, sep = ""), varname = "tas")
+ipsl <- brick(paste(path, IPSL, sep = ""), varname = "tas")
+mohc <- brick(paste(path, MOHC, sep = ""), varname = "tas")
+mpi <- brick(paste(path, MPI, sep = ""), varname = "tas")
+```
+
+*Set time step (day within the simulation, from 1 to 13149) to calculate: define by the user!*
+```{r}
+time <- 1314
+```
+
+Generate raster layers, calculate and plot
+```{r}
+cnrm_layer <- raster(cnrm, layer = time)
+ichec_layer <- raster(ichec, layer = time)
+ipsl_layer <- raster(ipsl, layer = time)
+mohc_layer <- raster(mohc, layer = time)
+mpi_layer <- raster(mpi, layer = time)
+
+data <- assign(paste('day_', time, sep=''), stack(cnrm_layer, ichec_layer, ipsl_layer, mohc_layer, mpi_layer))
+
+mean_data <- calc(data, fun = mean)
+plot(mean_data, main = paste("Mean of daily maximum temperature across models at t = ", time, sep = ""), xlab = "Longitude (º)", ylab = "Latitude (º)")
+stddev_data <- calc(data, fun = sd)
+plot(stddev_data, main = paste("Standard deviation of daily maximum temperature across models at t = ", time, sep = ""), xlab = "Longitude", ylab = "Latitude")
+stderr_data <- calc(data, fun = stderr)
+plot(stderr_data, main = paste("Standard error of daily maximum temperature across models at t = ", time, sep = ""), xlab = "Longitude", ylab = "Latitude")
+cv_data <- calc(data, fun = cv)
+plot(cv_data, main = paste("Coefficient of variation of daily maximum temperature across models at t = ", time, sep = ""), xlab = "Longitude", ylab = "Latitude")
+```
+
+
+# Precipitation
+
+(TO DO)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Notes: how to work as nc files
+
+Open .nc files
+```{r}
+cnrm_nc <- nc_open(paste(path, CNRM, sep = ""))
+ichec_nc <- nc_open(paste(path, ICHEC, sep = ""))
+ipsl_nc <- nc_open(paste(path, IPSL, sep = ""))
+mohc_nc <- nc_open(paste(path, MOHC, sep = ""))
+mpi_nc <- nc_open(paste(path, MPI, sep = ""))
+```
+
+Check variables and nc file structure
+```{r}
+cnrm
+attributes(cnrm)
+attributes(cnrm$var)
+
+ncvar_get(mohc, "lat")
+ncvar_get(mohc, "lon")
+ncvar_get(mohc, "tas")
+```
+
+```{r}
+# Create an array from the nc
+cnrm.array <- ncvar_get(cnrm, "tas")
+mpi.array <- ncvar_get(mpi, "tas")
+
+# Take one slice from the array
+cnrm.slice <- cnrm.array[, , 1] 
+mpi.slice <- mpi.array[, , 1]
+```
+
+Single model point timeseries plots:
+```{r}
+lon <- ncvar_get(cnrm, "lon")
+lat <- ncvar_get(cnrm, "lat", verbose = F)
+lon_index <- which.min(abs(lon - -3.754167))
+lat_index <- which.min(abs(lat - 37.27917))
+
+# cnrm
+tas_cnrm <- nc.get.var.subset.by.axes(cnrm, "tas", axis.indices = list(X = lon_index, Y = lat_index))
+
+tas_cnrm_time <- nc.get.time.series(cnrm, v = "tas",
+                               time.dim.name = "time")
+data_frame(time = tas_cnrm_time, 
+           tas = as.vector(tas_cnrm)) %>%
+        mutate(time = as.Date(format(time, "%Y-%m-%d"))) %>%
+        ggplot(aes(x = time, y = tas)) + 
+        geom_line() + 
+        xlab("Date") + ylab("Temperature (K)") + 
+        theme_classic() +
+        ggtitle("CNRM")
+```
+
+All models point timeseries dataframe:
+```{r}
+tas_cnrm <- nc.get.var.subset.by.axes(cnrm, "tas", axis.indices = list(X = lon_index, Y = lat_index))
+tas_ichec <- nc.get.var.subset.by.axes(ichec, "tas", axis.indices = list(X = lon_index, Y = lat_index))
+tas_ipsl <- nc.get.var.subset.by.axes(ipsl, "tas", axis.indices = list(X = lon_index, Y = lat_index))
+tas_mohc <- nc.get.var.subset.by.axes(mohc, "tas", axis.indices = list(X = lon_index, Y = lat_index))
+tas_mpi <- nc.get.var.subset.by.axes(mpi, "tas", axis.indices = list(X = lon_index, Y = lat_index))
+
+ts <- data_frame(cnrm_time = tas_cnrm_time, tas_cnrm = as.vector(tas_cnrm), tas_ichec = as.vector(tas_ichec), tas_ipsl = as.vector(tas_ipsl), tas_mohc = as.vector(tas_mohc), tas_mpi = as.vector(tas_mpi)) %>%
+  mutate(cnrm_time = as.Date(format(cnrm_time, "%Y-%m-%d")))
+
+melted_ts <- melt(ts, id = c("cnrm_time"))
+
+ggplot(melted_ts, aes(x = cnrm_time, y = value, colour = variable)) +
+  geom_line() +
+  xlab("Date") + ylab("Temperature (K)") +
+  theme_classic()
+```
+
+Close all
+```{r}
+nc_close(cnrm)
+nc_close(ichec)
+nc_close(ipsl)
+nc_close(mohc)
+nc_close(mpi)
+```
