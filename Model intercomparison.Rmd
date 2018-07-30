@@ -86,8 +86,8 @@ Calculate metrics as rasters (mean, std.dev, std.error, cv,...) for a given time
 
 *Set time step to calculate: define by the user!*
 ```{r}
-data <- year_30
-time <- 30
+data <- year_15
+time <- 15
 ```
 
 Calculate and plot:
@@ -399,6 +399,38 @@ cv_data <- calc(data, fun = cv)
 plot(cv_data, main = paste("Coefficient of variation of daily minimum temperature across models at t = ", time, sep = ""), xlab = "Longitude", ylab = "Latitude")
 ```
 
+## Further analysis
+
+Since I would like to use day min and maximum temperatures for my model, I would like to assess how these metrics are simulated in general, for the whole simulation, and not only day per day.
+
+Let's check the first 0 days of the simulation:
+
+Generate raster layers, calculate and plot
+```{r}
+
+for (i in 1:20) {
+  cnrm_layer <- raster(cnrm, layer = i)
+  ichec_layer <- raster(ichec, layer = i)
+  ipsl_layer <- raster(ipsl, layer = i)
+  mohc_layer <- raster(mohc, layer = i)
+  mpi_layer <- raster(mpi, layer = i)
+
+  assign(paste('stddev_', i, sep=''), calc(stack(cnrm_layer, ichec_layer, ipsl_layer, mohc_layer, mpi_layer), fun = sd))
+
+  assign(paste('stderr_', i, sep=''), calc(stack(cnrm_layer, ichec_layer, ipsl_layer, mohc_layer, mpi_layer), fun = stderr))
+
+  assign(paste('cv_', i, sep=''), calc(stack(cnrm_layer, ichec_layer, ipsl_layer, mohc_layer, mpi_layer), fun = cv))
+}
+
+
+sddev_mean <- calc(stack(stddev_1, stddev_2, stddev_3, stddev_4, stddev_5, stddev_6, stddev_7, stddev_8, stddev_9, stddev_10, stddev_11, stddev_12, stddev_13, stddev_14, stddev_15, stddev_16, stddev_17, stddev_18, stddev_19, stddev_20), fun = mean)
+
+stderr_mean <- calc(stack(stderr_1, stderr_2, stderr_3, stderr_4, stderr_5, stderr_6, stderr_7, stderr_8, stderr_9, stderr_10, stderr_11, stderr_12, stderr_13, stderr_14, stderr_15, stderr_16, stderr_17, stderr_18, stderr_19, stderr_20), fun = mean)
+
+cv_mean <- calc(stack(cv_1, cv_2, cv_3, cv_4, cv_5, cv_6, cv_7, cv_8, cv_9, cv_10, cv_11, cv_12, cv_13, cv_14, cv_15, cv_16, cv_17, cv_18, cv_19, cv_20), fun = mean)
+
+plot(cv_mean, main = "Mean of cv", xlab = "Longitude", ylab = "Latitude")
+```
 
 ### Daymax
 
@@ -478,13 +510,13 @@ mpi_nc <- nc_open(paste(path, MPI, sep = ""))
 
 Check variables and nc file structure
 ```{r}
-cnrm
-attributes(cnrm)
-attributes(cnrm$var)
+cnrm_nc
+attributes(cnrm_nc)
+attributes(cnrm_nc$var)
 
-ncvar_get(mohc, "lat")
-ncvar_get(mohc, "lon")
-ncvar_get(mohc, "tas")
+ncvar_get(cnrm_nc, "lat")
+ncvar_get(cnrm_nc, "lon")
+ncvar_get(cnrm_nc)
 ```
 
 ```{r}
@@ -499,33 +531,33 @@ mpi.slice <- mpi.array[, , 1]
 
 Single model point timeseries plots:
 ```{r}
-lon <- ncvar_get(cnrm, "lon")
-lat <- ncvar_get(cnrm, "lat", verbose = F)
-lon_index <- which.min(abs(lon - -3.754167))
-lat_index <- which.min(abs(lat - 37.27917))
+lon <- ncvar_get(cnrm_nc, "lon")
+lat <- ncvar_get(cnrm_nc, "lat", verbose = F)
+lon_index <- which.min(abs(lon - -3.311389)) # Mulhacen
+lat_index <- which.min(abs(lat - 37.05417)) # Mulhacen
 
 # cnrm
-tas_cnrm <- nc.get.var.subset.by.axes(cnrm, "tas", axis.indices = list(X = lon_index, Y = lat_index))
+tas_cnrm <- nc.get.var.subset.by.axes(cnrm_nc, "tas", axis.indices = list(X = lon_index, Y = lat_index))
 
-tas_cnrm_time <- nc.get.time.series(cnrm, v = "tas",
+tas_cnrm_time <- nc.get.time.series(cnrm_nc, v = "tas",
                                time.dim.name = "time")
 data_frame(time = tas_cnrm_time, 
            tas = as.vector(tas_cnrm)) %>%
         mutate(time = as.Date(format(time, "%Y-%m-%d"))) %>%
         ggplot(aes(x = time, y = tas)) + 
         geom_line() + 
-        xlab("Date") + ylab("Temperature (K)") + 
+        xlab("Date") + ylab("Temperature (ºC)") + 
         theme_classic() +
         ggtitle("CNRM")
 ```
 
 All models point timeseries dataframe:
 ```{r}
-tas_cnrm <- nc.get.var.subset.by.axes(cnrm, "tas", axis.indices = list(X = lon_index, Y = lat_index))
-tas_ichec <- nc.get.var.subset.by.axes(ichec, "tas", axis.indices = list(X = lon_index, Y = lat_index))
-tas_ipsl <- nc.get.var.subset.by.axes(ipsl, "tas", axis.indices = list(X = lon_index, Y = lat_index))
-tas_mohc <- nc.get.var.subset.by.axes(mohc, "tas", axis.indices = list(X = lon_index, Y = lat_index))
-tas_mpi <- nc.get.var.subset.by.axes(mpi, "tas", axis.indices = list(X = lon_index, Y = lat_index))
+tas_cnrm <- nc.get.var.subset.by.axes(cnrm_nc, "tas", axis.indices = list(X = lon_index, Y = lat_index))
+tas_ichec <- nc.get.var.subset.by.axes(ichec_nc, "tas", axis.indices = list(X = lon_index, Y = lat_index))
+tas_ipsl <- nc.get.var.subset.by.axes(ipsl_nc, "tas", axis.indices = list(X = lon_index, Y = lat_index))
+tas_mohc <- nc.get.var.subset.by.axes(mohc_nc, "tas", axis.indices = list(X = lon_index, Y = lat_index))
+tas_mpi <- nc.get.var.subset.by.axes(mpi_nc, "tas", axis.indices = list(X = lon_index, Y = lat_index))
 
 ts <- data_frame(cnrm_time = tas_cnrm_time, tas_cnrm = as.vector(tas_cnrm), tas_ichec = as.vector(tas_ichec), tas_ipsl = as.vector(tas_ipsl), tas_mohc = as.vector(tas_mohc), tas_mpi = as.vector(tas_mpi)) %>%
   mutate(cnrm_time = as.Date(format(cnrm_time, "%Y-%m-%d")))
@@ -534,15 +566,15 @@ melted_ts <- melt(ts, id = c("cnrm_time"))
 
 ggplot(melted_ts, aes(x = cnrm_time, y = value, colour = variable)) +
   geom_line() +
-  xlab("Date") + ylab("Temperature (K)") +
+  xlab("Date") + ylab("Temperature (ºC)") +
   theme_classic()
 ```
 
 Close all
 ```{r}
-nc_close(cnrm)
-nc_close(ichec)
-nc_close(ipsl)
-nc_close(mohc)
-nc_close(mpi)
+nc_close(cnrm_nc)
+nc_close(ichec_nc)
+nc_close(ipsl_nc)
+nc_close(mohc_nc)
+nc_close(mpi_nc)
 ```
