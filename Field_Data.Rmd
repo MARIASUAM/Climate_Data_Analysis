@@ -1,0 +1,235 @@
+---
+title: "Field Data"
+output: html_document
+---
+
+# Setting up:
+
+Load libraries:
+```{r}
+library(dplyr)
+```
+
+Set working directory:
+```{r}
+path <- "D:/Maria/Proyectos/ECOPOTENTIAL_FUTURE_PROJECTIONS/Field_Observations/" # María
+# path <- "..." # Ricardo
+list.files(path = path)
+```
+
+# Description
+
+Linaria Data Base is used to download the field observations to be used for comparison with modelled data. For this purpose, first a selection of the stations falling within climate data extension is performed. Minimum and maximum values of latitude and longitude from climate data extension were identified in "Model intercomparison.Rmd". The selection is done through pgAdmin as:
+
+```{sql}
+WITH temporal AS (
+SELECT
+	codigo,
+	id,
+	nombre,
+	ST_X(cli_estaciones.geometria)::numeric(10,8) as long,
+	ST_Y(cli_estaciones.geometria)::numeric(10,8) as lat
+	FROM cli_estaciones
+	ORDER BY codigo)
+
+SELECT 	codigo,
+	id,
+	nombre,
+	long,
+	lat
+	FROM temporal
+	WHERE long >= -3.754167 AND long <= -2.554167 AND lat >= 36.8125 AND lat <= 37.35417;
+```
+
+The SQL result was exported as Selected_stations.csv file:
+
+```{r}
+stations <- read.csv(paste(path, "Selected_stations.csv", sep = ""), sep = ";")
+```
+
+Stations to select are those with id 432, 431, 100, 99, 125, 218, 219, 246, 147, 146, 363, 61, 161, 58, 60, 238, 83, 59, 139, 414, 208, 206, 209, 207, 104, 105, 413, 157, 154, 213, 340, 324, 326, 368, 366, 102, 317, 365, 367, 369, 325, 220, 221, 196, 204, 200, 201, 199, 278, 202, 280, 276, 279, 195, 247, 197, 203, 342, 159, 160, 158, 69, 67, 256, 48, 45, 47, 198, 89, 91, 241, 257, 383, 155, 299, 122, 49, 46, 315, 272, 142, 90, 328, 329, 54, 132, 262, 309, 109, 118, 404, 405, 113, 334, 333, 332, 331, 314, 308, 307, 386, 304, 129, 311, 312, 166, 165, 164, 296, 53, 372, 254, 313, 88, 335, 252, 211, 212, 343, 416, 52, 50, 319, 56, 96, 255, 267, 408, 410, 417, 270, 106, 407, 336, 111, 110, 151, 177, 176, 41, 377, 133, 215, 216, 217, 180, 35, 33, 34, 32, 290, 162, 289, 44, 259, 260, 258, 300, 127, 128, 64, 63, 121, 188, 186, 57, 263, 66, 120, 306, 406, 338, 361, 134, 163, 337, 277, 112, 144, 388, 344, 345, 346, 347, 385, 17, 360, 19, 31, 22, 348, 349, 350, 351, 394, 373, 435, 4, 6, 7, 8, 9, 10, 11, 12, 352, 353, 354, 355, 23, 24, 26, 27, 28, 29, 261, 382, 409, 179, 239, 119, 310, 222, 205, 145, 123, 92, 124, 318, 150, 253, 249, 250, 251, 356, 357, 358 or 359
+
+After selected stations are identified, data from these stations regarding temperature and precipitation should be downloaded. For this purpose, identification of variables id is required and is done based on "variables_linaria.xlsx". The conclusion is that:
+
+Climate variables related to air temperature are those with id 2, 3, 28, 30, 31, 32, 71, 72, 73, 126, 127 or 128.
+
+Climate variables related to precipitation are those with id 1, 42, 43, 130.
+
+These conclusion, specially regarding temperature, could be checked in case some additional variables can be useful.
+
+# Temperature data
+
+In order to download temperature data from selected stations we should run the following query:
+
+```{sql}
+SELECT id, cli_estacion_id, cli_variable_id, valor, fecha, created_at, updated_at, cli_validacione_id 
+
+FROM cli_datos_estaciones
+
+WHERE cli_estacion_id IN (432, 431, 100, 99, 125, 218, 219, 246, 147, 146, 363, 61, 161, 58, 60, 238, 83, 59, 139, 414, 208, 206, 209, 207, 104, 105, 413, 157, 154, 213, 340, 324, 326, 368, 366, 102, 317, 365, 367, 369, 325, 220, 221, 196, 204, 200, 201, 199, 278, 202, 280, 276, 279, 195, 247, 197, 203, 342, 159, 160, 158, 69, 67, 256, 48, 45, 47, 198, 89, 91, 241, 257, 383, 155, 299, 122, 49, 46, 315, 272, 142, 90, 328, 329, 54, 132, 262, 309, 109, 118, 404, 405, 113, 334, 333, 332, 331, 314, 308, 307, 386, 304, 129, 311, 312, 166, 165, 164, 296, 53, 372, 254, 313, 88, 335, 252, 211, 212, 343, 416, 52, 50, 319, 56, 96, 255, 267, 408, 410, 417, 270, 106, 407, 336, 111, 110, 151, 177, 176, 41, 377, 133, 215, 216, 217, 180, 35, 33, 34, 32, 290, 162, 289, 44, 259, 260, 258, 300, 127, 128, 64, 63, 121, 188, 186, 57, 263, 66, 120, 306, 406, 338, 361, 134, 163, 337, 277, 112, 144, 388, 344, 345, 346, 347, 385, 17, 360, 19, 31, 22, 348, 349, 350, 351, 394, 373, 435, 4, 6, 7, 8, 9, 10, 11, 12, 352, 353, 354, 355, 23, 24, 26, 27, 28, 29, 261, 382, 409, 179, 239, 119, 310, 222, 205, 145, 123, 92, 124, 318, 150, 253, 249, 250, 251, 356, 357, 358, 359) AND
+cli_variable_id IN (2, 3, 28, 30, 31, 32, 71, 72, 73, 126, 127 or 128)
+```
+
+However, Linaria is not working properly and server falls continuously. Therefore, in order to narrow the query, stations where no variable is measured are discarded based on the following queries: 
+
+```{sql}
+-- Consulta 1: 
+WITH temporal AS (
+  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
+      WHERE cli_estacion_id IN (432, 431, 100, 99, 125, 218, 219, 246, 147, 146, 363, 61))
+  SELECT DISTINCT cli_estacion_id FROM temporal
+
+-- Consulta 2:
+WITH temporal AS (
+  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
+      WHERE cli_estacion_id IN (161, 58, 60, 238, 83, 59, 139, 414, 208, 206, 209, 207))
+  SELECT DISTINCT cli_estacion_id FROM temporal
+
+-- Consulta 3:
+WITH temporal AS (
+  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
+      WHERE cli_estacion_id IN (104, 105, 413, 157, 154, 213, 340, 324, 326, 368, 366))
+  SELECT DISTINCT cli_estacion_id FROM temporal
+
+-- Consulta 4:
+WITH temporal AS (
+  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
+      WHERE cli_estacion_id IN (102, 317, 365, 367, 369, 325, 220, 221, 196, 204, 200))
+  SELECT DISTINCT cli_estacion_id FROM temporal
+
+-- Consulta 5:
+WITH temporal AS (
+  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
+      WHERE cli_estacion_id IN (201, 199, 278, 202, 280, 276, 279, 195, 247, 197, 203))
+  SELECT DISTINCT cli_estacion_id FROM temporal
+
+-- Consulta 6:
+WITH temporal AS (
+  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
+      WHERE cli_estacion_id IN (342, 159, 160, 158, 69, 67, 256, 48, 45, 47, 198, 89, 91))
+  SELECT DISTINCT cli_estacion_id FROM temporal
+
+-- Consulta 7:
+WITH temporal AS (
+  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
+      WHERE cli_estacion_id IN (241, 257, 383, 155, 299, 122, 49, 46, 315, 272, 142, 90))
+  SELECT DISTINCT cli_estacion_id FROM temporal
+
+-- Consulta 8:
+WITH temporal AS (
+  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
+      WHERE cli_estacion_id IN (328, 329, 54, 132, 262, 309, 109, 118, 404, 405, 113, 334))
+  SELECT DISTINCT cli_estacion_id FROM temporal
+
+-- Consulta 9:
+WITH temporal AS (
+  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
+      WHERE cli_estacion_id IN (333, 332, 331, 314, 308, 307, 386, 304, 129, 311, 312))
+  SELECT DISTINCT cli_estacion_id FROM temporal
+
+-- Consulta 10:
+WITH temporal AS (
+  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
+      WHERE cli_estacion_id IN (166, 165, 164, 296, 53, 372, 254, 313, 88, 335, 252, 211))
+  SELECT DISTINCT cli_estacion_id FROM temporal
+
+-- Consulta 11:
+WITH temporal AS (
+  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
+      WHERE cli_estacion_id IN (212, 343, 416, 52, 50, 319, 56, 96, 255, 267, 408, 410))
+  SELECT DISTINCT cli_estacion_id FROM temporal
+
+-- Consulta 12:
+WITH temporal AS (
+  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
+      WHERE cli_estacion_id IN (417, 270, 106, 407, 336, 111, 110, 151, 177, 176, 41, 377))
+  SELECT DISTINCT cli_estacion_id FROM temporal
+
+-- Consulta 13:
+WITH temporal AS (
+  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
+      WHERE cli_estacion_id IN (133, 215, 216, 217, 180, 35, 33, 34, 32, 290, 162, 289))
+  SELECT DISTINCT cli_estacion_id FROM temporal
+
+-- Consulta 14:
+WITH temporal AS (
+  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
+      WHERE cli_estacion_id IN (44, 259, 260, 258, 300, 127, 128, 64, 63, 121, 188, 186))
+  SELECT DISTINCT cli_estacion_id FROM temporal
+
+-- Consulta 15:
+WITH temporal AS (
+  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
+      WHERE cli_estacion_id IN (57, 263, 66, 120, 306, 406, 338, 361, 134, 163, 337, 277))
+  SELECT DISTINCT cli_estacion_id FROM temporal
+
+-- Consulta 16:
+WITH temporal AS (
+  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
+      WHERE cli_estacion_id IN (112, 144, 388, 344, 345, 346, 347, 385, 17, 360, 19, 31))
+  SELECT DISTINCT cli_estacion_id FROM temporal
+
+-- Consulta 17:
+WITH temporal AS (
+  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
+      WHERE cli_estacion_id IN (22, 348, 349, 350, 351, 394, 373, 435, 4, 6, 7, 8, 9, 10))
+  SELECT DISTINCT cli_estacion_id FROM temporal
+
+-- Consulta 18:
+WITH temporal AS (
+  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
+      WHERE cli_estacion_id IN (11, 12, 352, 353, 354, 355, 23, 24, 26, 27, 28, 29, 261))
+  SELECT DISTINCT cli_estacion_id FROM temporal
+
+-- Consulta 19:
+WITH temporal AS (
+  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
+      WHERE cli_estacion_id IN (382, 409, 179, 239, 119, 310, 222, 205, 145, 123, 92, 124))
+  SELECT DISTINCT cli_estacion_id FROM temporal
+  
+-- Consulta 20:
+WITH temporal AS (
+  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
+      WHERE cli_estacion_id IN (318, 150, 253, 249, 250, 251, 356, 357, 358, 359))
+  SELECT DISTINCT cli_estacion_id FROM temporal
+```
+
+The output of each query is exported as .csv file and then each of these is merged together: 
+
+```{r}
+filtered_stations <- data.frame()
+
+for (i in 1:20) {
+  consulta <- read.csv(paste(path, "Consulta_", i, ".csv", sep = ""))
+  filtered_stations <- rbind(filtered_stations, consulta)
+}
+
+filtered_stations$cli_estacion_id
+
+colnames(filtered_stations) <- c("id")
+
+filtered_stations <- filtered_stations %>%
+  left_join(stations)
+
+colnames(filtered_stations) <- c("cli_estacion_id", "codigo", "nombre", "long", "lat")
+
+# write.csv(filtered_stations, paste(path, "filtered_stations.csv", sep = ""))
+```
+
+As a result, 56 stations have been discarded since no variable was measured in them, and now "filtered_stations" are 182 stations. Now we would like to download the data from temperature variables coming from this stations and only referring to the historical period (1970-2006), as this is the period to compare with modelled data. The query we want to run is something like this:
+
+```{sql}
+WITH temporal AS (
+SELECT id, cli_estacion_id, cli_variable_id, valor, fecha, created_at, updated_at, cli_validacione_id FROM cli_datos_estaciones
+    WHERE fecha BETWEEN '1970-01-01 00:00:00' AND '2006-01-01 00:00:00' )
+
+SELECT id, cli_estacion_id, cli_variable_id, valor, fecha, created_at, updated_at, cli_validacione_id FROM temporal
+    WHERE cli_estacion_id IN (61, 99, 125, 147, 219, 146, 100, 218, 246, 209, 208, 83, 161, 58, 139, 206, 238, 207, 60, 340, 368, 157, 154, 366, 213, 324, 104, 413, 105, 220, 367, 325, 204, 221, 200, 317, 196, 102, 195, 247, 280, 276, 199, 197, 201, 202, 342, 47, 67, 48, 160, 69, 158, 91, 45, 159, 241, 122, 90, 272, 155, 315, 383, 54, 132, 262, 329, 109, 334, 404, 405, 309, 113, 118, 328, 129, 311, 386, 314, 312, 304, 332, 308, 331, 166, 252, 254, 211, 53, 296, 164, 88, 165, 335, 166, 252, 254, 211, 53, 296, 164, 88, 165, 335, 106, 176, 110, 151, 407, 270, 111, 417, 41, 177, 162, 33, 180, 35, 34, 32, 290, 289, 133, 217, 216, 259, 121, 258, 127, 44, 188, 63, 260, 64, 128, 300, 186, 337, 277, 57, 263, 360, 112, 388, 17, 19, 31, 385, 144, 8, 4, 22, 10, 9, 6, 7, 28, 261, 23, 26, 27, 11, 12, 24, 29, 179, 119, 222, 123, 310, 92, 409, 382, 124, 205, 239, 145, 318, 253, 249, 150, 250) 
+    AND cli_variable_id IN (2, 3, 28, 30, 31, 32, 71, 72, 73, 126, 127, 128)
+```
+
+Nevertheless, Linaria keeps having problems and downloading is not possible at the moment.
+
+# Notes for further work
+
+Once Linaria is working, if precious query is too heavy, and extra filtering step could be to check which stations measure any of the desired variables, and discard those stations where no data about temperature is recorded. If these are a lot of stations the query should be much easier to run. 

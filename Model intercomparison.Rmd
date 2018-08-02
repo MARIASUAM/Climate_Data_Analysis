@@ -206,6 +206,8 @@ plot(cv_data, main = paste("Coefficient of variation of fall mean temperature ac
 
 ### Winter
 
+**Note**: calculations about winter period need to be checked!
+
 File names:
 ```{r}
 CNRM <- "temp_CNRM_historical_winter_mean.nc"
@@ -432,6 +434,8 @@ cv_mean <- calc(stack(cv_1, cv_2, cv_3, cv_4, cv_5, cv_6, cv_7, cv_8, cv_9, cv_1
 plot(cv_mean, main = "Mean of cv", xlab = "Longitude", ylab = "Latitude")
 ```
 
+**Note**: is this the right way to do this analysis? further work is needed, but some feedback from expert would be highly desirable...
+
 ### Daymax
 
 File names:
@@ -486,95 +490,3 @@ plot(cv_data, main = paste("Coefficient of variation of daily maximum temperatur
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-# Notes: how to work as nc files
-
-Open .nc files
-```{r}
-cnrm_nc <- nc_open(paste(path, CNRM, sep = ""))
-ichec_nc <- nc_open(paste(path, ICHEC, sep = ""))
-ipsl_nc <- nc_open(paste(path, IPSL, sep = ""))
-mohc_nc <- nc_open(paste(path, MOHC, sep = ""))
-mpi_nc <- nc_open(paste(path, MPI, sep = ""))
-```
-
-Check variables and nc file structure
-```{r}
-cnrm_nc
-attributes(cnrm_nc)
-attributes(cnrm_nc$var)
-
-ncvar_get(cnrm_nc, "lat")
-ncvar_get(cnrm_nc, "lon")
-ncvar_get(cnrm_nc)
-```
-
-```{r}
-# Create an array from the nc
-cnrm.array <- ncvar_get(cnrm, "tas")
-mpi.array <- ncvar_get(mpi, "tas")
-
-# Take one slice from the array
-cnrm.slice <- cnrm.array[, , 1] 
-mpi.slice <- mpi.array[, , 1]
-```
-
-Single model point timeseries plots:
-```{r}
-lon <- ncvar_get(cnrm_nc, "lon")
-lat <- ncvar_get(cnrm_nc, "lat", verbose = F)
-lon_index <- which.min(abs(lon - -3.311389)) # Mulhacen
-lat_index <- which.min(abs(lat - 37.05417)) # Mulhacen
-
-# cnrm
-tas_cnrm <- nc.get.var.subset.by.axes(cnrm_nc, "tas", axis.indices = list(X = lon_index, Y = lat_index))
-
-tas_cnrm_time <- nc.get.time.series(cnrm_nc, v = "tas",
-                               time.dim.name = "time")
-data_frame(time = tas_cnrm_time, 
-           tas = as.vector(tas_cnrm)) %>%
-        mutate(time = as.Date(format(time, "%Y-%m-%d"))) %>%
-        ggplot(aes(x = time, y = tas)) + 
-        geom_line() + 
-        xlab("Date") + ylab("Temperature (ºC)") + 
-        theme_classic() +
-        ggtitle("CNRM")
-```
-
-All models point timeseries dataframe:
-```{r}
-tas_cnrm <- nc.get.var.subset.by.axes(cnrm_nc, "tas", axis.indices = list(X = lon_index, Y = lat_index))
-tas_ichec <- nc.get.var.subset.by.axes(ichec_nc, "tas", axis.indices = list(X = lon_index, Y = lat_index))
-tas_ipsl <- nc.get.var.subset.by.axes(ipsl_nc, "tas", axis.indices = list(X = lon_index, Y = lat_index))
-tas_mohc <- nc.get.var.subset.by.axes(mohc_nc, "tas", axis.indices = list(X = lon_index, Y = lat_index))
-tas_mpi <- nc.get.var.subset.by.axes(mpi_nc, "tas", axis.indices = list(X = lon_index, Y = lat_index))
-
-ts <- data_frame(cnrm_time = tas_cnrm_time, tas_cnrm = as.vector(tas_cnrm), tas_ichec = as.vector(tas_ichec), tas_ipsl = as.vector(tas_ipsl), tas_mohc = as.vector(tas_mohc), tas_mpi = as.vector(tas_mpi)) %>%
-  mutate(cnrm_time = as.Date(format(cnrm_time, "%Y-%m-%d")))
-
-melted_ts <- melt(ts, id = c("cnrm_time"))
-
-ggplot(melted_ts, aes(x = cnrm_time, y = value, colour = variable)) +
-  geom_line() +
-  xlab("Date") + ylab("Temperature (ºC)") +
-  theme_classic()
-```
-
-Close all
-```{r}
-nc_close(cnrm_nc)
-nc_close(ichec_nc)
-nc_close(ipsl_nc)
-nc_close(mohc_nc)
-nc_close(mpi_nc)
-```

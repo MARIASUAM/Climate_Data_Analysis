@@ -1,0 +1,220 @@
+---
+title: "Modelled vs Field Data"
+output: html_document
+---
+
+# Setting up:
+
+Load libraries:
+```{r}
+library(dplyr)
+library(ggplot2)
+```
+
+Set working directory:
+```{r}
+path <- "D:/Maria/Proyectos/ECOPOTENTIAL_FUTURE_PROJECTIONS/" # María
+# path <- "..." # Ricardo
+```
+
+# Description
+
+Once models are compared with each other to assess spread and uncertainty (see "Model intercomparison.Rmd"), modelled data should be compared with field observations to assess model performance/model error. Field observations data will be downloaded from Linaria database. Documentation of this process (selection of stations, variables, queries, filters,...) can be found in "Field_Data.Rmd". 
+
+Once field observations are downloaded, modelled and field data can be compared. Although they are not downloaded yet, I start preparing the code for the comparison in further sections. Since several variables have been calculated (yearmean, season mean, month mean, day min, day max), several sections will be needed. 
+
+# Year mean analysis
+
+We select only the stations where we know some variables are being measured. As "Field_Data.Rmd" advances, *this list could be modified, be careful*
+
+Stations:
+```{r}
+my_stations <- "filtered_stations.csv"
+my_stations <- read.csv(paste(path, "Field_Observations/", stations, sep = ""), sep = ",")
+```
+
+Modelled data - Since all models have the same long and lat, I open just one
+```{r}
+CNRM <- "temp_CNRM_historical_yearmean.nc"
+cnrm_nc <- nc_open(paste(path, "Outputs_201807/", CNRM, sep = ""))
+```
+
+# Extract pixels where there are stations
+
+```{r}
+lon <- ncvar_get(cnrm_nc, "lon")
+lat <- ncvar_get(cnrm_nc, "lat", verbose = F)
+
+# nc files have associated indexes for latitude and longitud to identy each pixel, so each station will have associated the indexes of the pixel where it stands
+my_stations$pixel_lat_index <- c()
+my_stations$pixel_lon_index <- c()
+
+for (i in 1:length(my_stations$cli_estacion_id)) {
+  lat_value <- my_stations$lat[i]
+  lon_value <- my_stations$lon[i]
+  
+  my_stations$pixel_index_lat[i] <- which.min(abs(lat - lat_value))
+  my_stations$pixel_index_lon[i] <- which.min(abs(lon - lon_value))
+}
+```
+
+# Generate data frame containing time series of all stations
+
+*Note* should this df has the mean of the 5 models or the date of the 5 models separately?
+
+So far, and just to construct the code I use model CNRM, but it should be modified to contain either:
+
+  - the 5 models (then an extra column indicating the model would be necessary, or each model data would be in one column), 
+  
+  - the average of the 5 models (then such average should be calculated, and maybe an extra parameter indicating variability should be included)
+
+```{r}
+ts_all_stations <- data.frame()
+
+for (i in 1:length(my_stations$cli_estacion_id)) {
+  tas_cnrm <- nc.get.var.subset.by.axes(cnrm_nc, "tas", axis.indices = list(X = my_stations$pixel_index_lon[i], Y = my_stations$pixel_index_lat[i]))
+  tas_cnrm_time <- nc.get.time.series(cnrm_nc, v = "tas",
+                               time.dim.name = "time")
+  
+  temp <- data_frame(time = tas_cnrm_time,
+                     modelled_tas = as.vector(tas_cnrm),
+                     cli_estacion_id = my_stations$cli_estacion_id[i])
+  
+  ts_all_stations <- rbind(ts_all_stations, temp)
+}
+
+ts_all_stations <- ts_all_stations %>%
+  mutate(time = as.Date(format(time, "%Y-%m-%d"))) %>%
+  mutate(cli_estacion_id = as.character(cli_estacion_id))
+```
+
+Plot time series
+
+```{r}
+ggplot(ts_all_stations, aes(x = time, y = tas, colour = cli_estacion_id)) +
+  geom_line() + 
+  xlab("Year") + ylab("Year mean temperature (ºC)") + 
+  theme(legend.position="none") +
+  ggtitle("CNRM time series for pixels where there are stations")
+```
+
+# Further work:
+
+In order to compare modelled vs field data, field observations should be incorporated into the timeseries (either in the same table or in a restructured table), and perform the comparison.
+
+For notes on how such comparison should be done see "Chapter 16. Assessing Model Performance" (Ecological Forecasting, M. Dietze). At minimum, calculate RMSE, correlation, bias and ratio between standard deviations.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Notes: how to work as nc files
+
+Open .nc files
+```{r}
+cnrm_nc <- nc_open(paste(path, CNRM, sep = ""))
+ichec_nc <- nc_open(paste(path, ICHEC, sep = ""))
+ipsl_nc <- nc_open(paste(path, IPSL, sep = ""))
+mohc_nc <- nc_open(paste(path, MOHC, sep = ""))
+mpi_nc <- nc_open(paste(path, MPI, sep = ""))
+```
+
+Check variables and nc file structure
+```{r}
+cnrm_nc
+attributes(cnrm_nc)
+attributes(cnrm_nc$var)
+
+ncvar_get(cnrm_nc, "lat")
+ncvar_get(cnrm_nc, "lon")
+ncvar_get(cnrm_nc)
+
+max(ncvar_get(cnrm_nc, "lon"))
+min(ncvar_get(cnrm_nc, "lon"))
+max(ncvar_get(cnrm_nc, "lat"))
+min(ncvar_get(cnrm_nc, "lat"))
+```
+
+```{r}
+# Create an array from the nc
+cnrm.array <- ncvar_get(cnrm, "tas")
+mpi.array <- ncvar_get(mpi, "tas")
+
+# Take one slice from the array
+cnrm.slice <- cnrm.array[, , 1] 
+mpi.slice <- mpi.array[, , 1]
+```
+
+Single model point timeseries plots:
+```{r}
+lon <- ncvar_get(cnrm_nc, "lon")
+lat <- ncvar_get(cnrm_nc, "lat", verbose = F)
+lon_index <- which.min(abs(lon - -3.500000)) 
+lat_index <- which.min(abs(lat - 37.05000)) 
+
+# cnrm
+tas_cnrm <- nc.get.var.subset.by.axes(cnrm_nc, "tas", axis.indices = list(X = lon_index, Y = lat_index))
+
+tas_cnrm_time <- nc.get.time.series(cnrm_nc, v = "tas",
+                               time.dim.name = "time")
+data_frame(time = tas_cnrm_time, 
+           tas = as.vector(tas_cnrm)) %>%
+        mutate(time = as.Date(format(time, "%Y-%m-%d"))) %>%
+        ggplot(aes(x = time, y = tas)) + 
+        geom_line() + 
+        xlab("Date") + ylab("Temperature (ºC)") + 
+        theme_classic() +
+        ggtitle("CNRM")
+```
+
+All models point timeseries dataframe:
+```{r}
+tas_cnrm <- nc.get.var.subset.by.axes(cnrm_nc, "tas", axis.indices = list(X = lon_index, Y = lat_index))
+tas_ichec <- nc.get.var.subset.by.axes(ichec_nc, "tas", axis.indices = list(X = lon_index, Y = lat_index))
+tas_ipsl <- nc.get.var.subset.by.axes(ipsl_nc, "tas", axis.indices = list(X = lon_index, Y = lat_index))
+tas_mohc <- nc.get.var.subset.by.axes(mohc_nc, "tas", axis.indices = list(X = lon_index, Y = lat_index))
+tas_mpi <- nc.get.var.subset.by.axes(mpi_nc, "tas", axis.indices = list(X = lon_index, Y = lat_index))
+
+ts <- data_frame(cnrm_time = tas_cnrm_time, tas_cnrm = as.vector(tas_cnrm), tas_ichec = as.vector(tas_ichec), tas_ipsl = as.vector(tas_ipsl), tas_mohc = as.vector(tas_mohc), tas_mpi = as.vector(tas_mpi)) %>%
+  mutate(cnrm_time = as.Date(format(cnrm_time, "%Y-%m-%d")))
+
+melted_ts <- melt(ts, id = c("cnrm_time"))
+
+ggplot(melted_ts, aes(x = cnrm_time, y = value, colour = variable)) +
+  geom_line() +
+  xlab("Date") + ylab("Temperature (ºC)") +
+  theme_classic()
+```
+
+Close all
+```{r}
+nc_close(cnrm_nc)
+nc_close(ichec_nc)
+nc_close(ipsl_nc)
+nc_close(mohc_nc)
+nc_close(mpi_nc)
+```
