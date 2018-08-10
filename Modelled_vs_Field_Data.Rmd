@@ -1,6 +1,8 @@
 ---
 title: "Modelled vs Field Data"
-output: html_document
+output:
+  word_document: default
+  pdf_document: default
 ---
 
 # Setting up:
@@ -9,6 +11,9 @@ Load libraries:
 ```{r}
 library(dplyr)
 library(ggplot2)
+library(ncdf4)
+library(ncdf4.helpers)
+library(reshape2)
 ```
 
 Set working directory:
@@ -21,26 +26,27 @@ path <- "D:/Maria/Proyectos/ECOPOTENTIAL_FUTURE_PROJECTIONS/" # María
 
 Once models are compared with each other to assess spread and uncertainty (see "Model intercomparison.Rmd"), modelled data should be compared with field observations to assess model performance/model error. Field observations data will be downloaded from Linaria database. Documentation of this process (selection of stations, variables, queries, filters,...) can be found in "Field_Data.Rmd". 
 
-Once field observations are downloaded, modelled and field data can be compared. Although they are not downloaded yet, I start preparing the code for the comparison in further sections. Since several variables have been calculated (yearmean, season mean, month mean, day min, day max), several sections will be needed. 
+Once field observations are downloaded, modelled and field data can be compared. Although they are not downloaded yet, I start preparing the code for the comparison in further sections with a test dataset. Since several variables have been calculated (yearmean, season mean, month mean, day min, day max), several sections will be needed. At the moment, since the test dataset refers to monthly means, analysis is done for this case only. 
 
-# Year mean analysis
+For notes on how such comparison should be done see "Chapter 16. Assessing Model Performance" (Ecological Forecasting, M. Dietze). At minimum, calculate RMSE, correlation, bias and ratio between standard deviations.
+
+# Extract pixels indexes where there are stations
 
 We select only the stations where we know some variables are being measured. As "Field_Data.Rmd" advances, *this list could be modified, be careful*
 
 Stations:
 ```{r}
 my_stations <- "filtered_stations.csv"
-my_stations <- read.csv(paste(path, "Field_Observations/", stations, sep = ""), sep = ",")
+my_stations <- read.csv(paste(path, "Field_Observations/", my_stations, sep = ""), sep = ",")
 ```
 
-Modelled data - Since all models have the same long and lat, I open just one
+Modelled data - All models have the same long and lat, I open a random one:
 ```{r}
-CNRM <- "temp_CNRM_historical_yearmean.nc"
+CNRM <- "temp_CNRM_historical_monmean.nc"
 cnrm_nc <- nc_open(paste(path, "Outputs_201807/", CNRM, sep = ""))
 ```
 
-# Extract pixels where there are stations
-
+Extract pixel indexes:
 ```{r}
 lon <- ncvar_get(cnrm_nc, "lon")
 lat <- ncvar_get(cnrm_nc, "lat", verbose = F)
@@ -60,68 +66,217 @@ for (i in 1:length(my_stations$cli_estacion_id)) {
 
 # Generate data frame containing time series of all stations
 
-*Note* should this df has the mean of the 5 models or the date of the 5 models separately?
+Test dataset of field observations are **monthly** means, so I do the analysis for the monthly means, but same analysis should be performed for all other metrics.
 
-So far, and just to construct the code I use model CNRM, but it should be modified to contain either:
+*Note* should this df has the mean of the 5 models or the date of the 5 models separately? Options:
 
-  - the 5 models (then an extra column indicating the model would be necessary, or each model data would be in one column), 
+  - df containing the 5 models (then an extra column indicating the model would be necessary, or each model data would be in one column), 
   
-  - the average of the 5 models (then such average should be calculated, and maybe an extra parameter indicating variability should be included)
+  - df containing the average of the 5 models (then such average should be calculated, and maybe an extra parameter indicating variability should be included)
 
+I decide to construct the df containing one column per model + mean + sd among values, so that when I include the observations as an extra column comparison can be easily done for each model individually or for the mean of them.
+
+Load modelled data:
 ```{r}
-ts_all_stations <- data.frame()
+CNRM <- "temp_CNRM_historical_monmean.nc"
+cnrm_nc <- nc_open(paste(path, "Outputs_201807/", CNRM, sep = ""))
+
+ICHEC <- "temp_ICHEC_historical_monmean.nc"
+ichec_nc <- nc_open(paste(path, "Outputs_201807/", ICHEC, sep = ""))
+
+IPSL <- "temp_IPSL_historical_monmean.nc"
+ipsl_nc <- nc_open(paste(path, "Outputs_201807/", IPSL, sep = ""))
+
+MOHC <- "temp_MOHC_historical_monmean.nc"
+mohc_nc <- nc_open(paste(path, "Outputs_201807/", MOHC, sep = ""))
+
+MPI <- "temp_MPI_historical_monmean.nc"
+mpi_nc <- nc_open(paste(path, "Outputs_201807/", MPI, sep = ""))
+```
+
+Generate models time series
+```{r}
+timeseries <- data.frame()
 
 for (i in 1:length(my_stations$cli_estacion_id)) {
+  # Collect "tas" time series for each model
   tas_cnrm <- nc.get.var.subset.by.axes(cnrm_nc, "tas", axis.indices = list(X = my_stations$pixel_index_lon[i], Y = my_stations$pixel_index_lat[i]))
+  tas_ichec <- nc.get.var.subset.by.axes(ichec_nc, "tas", axis.indices = list(X = my_stations$pixel_index_lon[i], Y = my_stations$pixel_index_lat[i]))
+  tas_ipsl <- nc.get.var.subset.by.axes(ipsl_nc, "tas", axis.indices = list(X = my_stations$pixel_index_lon[i], Y = my_stations$pixel_index_lat[i]))
+  tas_mohc <- nc.get.var.subset.by.axes(mohc_nc, "tas", axis.indices = list(X = my_stations$pixel_index_lon[i], Y = my_stations$pixel_index_lat[i]))
+  tas_mpi <- nc.get.var.subset.by.axes(mpi_nc, "tas", axis.indices = list(X = my_stations$pixel_index_lon[i], Y = my_stations$pixel_index_lat[i]))
+  
+  # Collect "time" time series for each model - although all are monthly means, apparently the time point to which the data is linked is not the same for all models. However, they do refer to the same month and year, so only one time timeseries will be used
   tas_cnrm_time <- nc.get.time.series(cnrm_nc, v = "tas",
                                time.dim.name = "time")
+  # tas_ichec_time <- nc.get.time.series(ichec_nc, v = "tas",
+  #                              time.dim.name = "time")
+  # tas_ipsl_time <- nc.get.time.series(ipsl_nc, v = "tas",
+  #                              time.dim.name = "time")
+  # tas_mohc_time <- nc.get.time.series(mohc_nc, v = "tas",
+  #                              time.dim.name = "time")
+  # tas_mpi_time <- nc.get.time.series(mpi_nc, v = "tas",
+  #                              time.dim.name = "time")
+    
+  temp <- data_frame(time_cnrm = tas_cnrm_time,
+                     tas_cnrm = as.vector(tas_cnrm),
+                     # time_ichec = tas_ichec_time,
+                     tas_ichec = as.vector(tas_ichec),
+                     # time_ipsl = tas_ipsl_time,
+                     tas_ipsl = as.vector(tas_ipsl),
+                     # time_mohc = tas_mohc_time,
+                     tas_mohc = as.vector(tas_mohc),
+                     # time_mpi = tas_mpi_time,
+                     tas_mpi = as.vector(tas_mpi),
+                     codigo = my_stations$codigo[i])
   
-  temp <- data_frame(time = tas_cnrm_time,
-                     modelled_tas = as.vector(tas_cnrm),
-                     cli_estacion_id = my_stations$cli_estacion_id[i])
-  
-  ts_all_stations <- rbind(ts_all_stations, temp)
+  timeseries <- rbind(timeseries, temp)
 }
-
-ts_all_stations <- ts_all_stations %>%
-  mutate(time = as.Date(format(time, "%Y-%m-%d"))) %>%
-  mutate(cli_estacion_id = as.character(cli_estacion_id))
 ```
 
-Plot time series
+Fetch time series
+```{r}
+timeseries <- timeseries %>%
+  mutate(time_cnrm = as.Date(format(time_cnrm, "%Y-%m-%d"))) %>%
+  mutate(year = as.integer(format(time_cnrm,"%Y"))) %>%
+  mutate(month = as.integer(format(time_cnrm,"%m"))) %>%
+  select(codigo, time_cnrm, year, month, tas_cnrm, tas_ichec, tas_ipsl, tas_mohc, tas_mpi) %>%
+  mutate(codigo = as.character(codigo))
+```
+
+Add field observations to time series dataframe
+```{r}
+clean_mfo <- read.csv(paste(path, "Field_Observations/clean_mfo.csv", sep = ""))
+
+clean_mfo <- clean_mfo %>%
+  mutate(obs_value = value) %>%
+  select(codigo, year, month, obs_value) %>%
+  mutate(codigo = as.character(codigo))
+
+full_ts <- inner_join(clean_mfo, timeseries)
+```
+
+Add metrics
+```{r}
+full_ts <- full_ts %>%
+  mutate(modelled_mean = ((tas_cnrm + tas_ichec + tas_ipsl + tas_mohc + tas_mpi) / 5)) %>%
+  mutate(modelled_sd = (sqrt((((tas_cnrm - modelled_mean) ^ 2) + ((tas_ichec - modelled_mean) ^ 2) + ((tas_ipsl - modelled_mean) ^ 2) + ((tas_mohc - modelled_mean) ^ 2) + ((tas_mpi - modelled_mean) ^ 2)) / 4)))
+```
+
+# Plotting - qualitative exploration
+
+Modelled vs observations: mean of models
+```{r}
+ggplot(full_ts, aes(x = modelled_mean, y = obs_value, colour = codigo)) +
+  geom_point() + 
+  xlab("Predicted value") + ylab("Observed value") + 
+  theme(legend.position="none") +
+  ggtitle("Comparison of monthly mean temperature predicted (mean across models) and observed values") +
+  scale_y_continuous(limits=c(-10, 40)) +
+  scale_x_continuous(limits=c(-10, 40)) +
+  geom_abline(slope = 1, intercept = 0)
+```
+
+Modelled vs observations: one model
+```{r}
+ggplot(full_ts, aes(x = tas_cnrm, y = obs_value, colour = codigo)) +
+  geom_point() + 
+  xlab("Predicted value") + ylab("Observed value") + 
+  theme(legend.position="none") +
+  ggtitle("Comparison of monthly mean temperature predicted by model CNRM and observed") +
+  scale_y_continuous(limits=c(-10, 40)) +
+  scale_x_continuous(limits=c(-10, 40)) +
+  geom_abline(slope = 1, intercept = 0)
+```
+
+Modelled vs observations: one-station time series
+```{r}
+selection <- full_ts %>%
+  filter(codigo == "5510A") %>%
+  select(time_cnrm, obs_value, modelled_mean) %>%
+  melt(id = c("time_cnrm"))
+
+ggplot(data = selection, aes(x = time_cnrm, y = value, colour = variable)) +
+  geom_line() + 
+  xlab("Year") + ylab("Monthly mean temperature (ºC)") + 
+  theme() +
+  ggtitle("Time series for station 5510A: observed and modelled") +
+  scale_y_continuous(limits=c(0, 30))
+```
+
+Modelled vs observations: all-stations time series all models and mean
+```{r}
+reshaped_ts <- melt(full_ts, id = c("codigo", "year", "month", "time_cnrm")) %>%
+  filter(variable != "modelled_sd")
+  
+ggplot(reshaped_ts, aes(x = time_cnrm, y = value, colour = variable)) +
+  geom_line() +
+  xlab("Date") + ylab("Temperature (ºC)") +
+  theme_classic()
+  
+```
+
+## Quantitative analysis
+
+Following "Chapter 16. Assessing Model Performance" (Ecological Forecasting, M. Dietze). 
+
+Correlations between observations and predicted values: per model and against modelled mean
+```{r}
+a <- cor.test(full_ts$obs_value, full_ts$tas_cnrm)
+b <- cor.test(full_ts$obs_value, full_ts$tas_ichec)
+c <- cor.test(full_ts$obs_value, full_ts$tas_ipsl)
+d <- cor.test(full_ts$obs_value, full_ts$tas_mohc)
+e <- cor.test(full_ts$obs_value, full_ts$tas_mpi)
+f <- cor.test(full_ts$obs_value, full_ts$modelled_mean)         
+
+names <- c("CNRM", "ICHEC", "IPSL", "MOHC", "MPI", "Models mean")
+correlations <- c(a$estimate, b$estimate, c$estimate, d$estimate, e$estimate, f$estimate)
+ci_1 <- c(a$conf.int[1], b$conf.int[1], c$conf.int[1], d$conf.int[1], e$conf.int[1], f$conf.int[1])
+ci_2 <- c(a$conf.int[2], b$conf.int[2], c$conf.int[2], d$conf.int[2], e$conf.int[2], f$conf.int[2])
+
+cor_table <- data.frame(names, correlations, ci_1, ci_2)
+cor_table
+
+ggplot(data = cor_table) +
+  geom_errorbar(mapping=aes(x = names, ymin = ci_1, ymax = ci_2)) +
+  geom_point(mapping=aes(x = names, y = correlations)) +
+  xlab(NULL) +
+  ylab("Pearson's correlation coefficient") +
+  ggtitle("Correlations modelled vs field observations")
+  
+```
+
+Root Mean Square Error (RMSE), Root Square, Bias and SD ratio
+
+*Calculated only for the mean of all five models, not for each model independently*
 
 ```{r}
-ggplot(ts_all_stations, aes(x = time, y = tas, colour = cli_estacion_id)) +
-  geom_line() + 
-  xlab("Year") + ylab("Year mean temperature (ºC)") + 
-  theme(legend.position="none") +
-  ggtitle("CNRM time series for pixels where there are stations")
+meanofobservationdata <- mean(full_ts$obs_value)
+
+rmse <- full_ts %>%
+  select(codigo, year, month, obs_value, modelled_mean, modelled_sd) %>%
+  mutate(sq_error = (modelled_mean - obs_value) ^ 2) %>%
+  mutate(deviationfromdata = (obs_value - meanofobservationdata) ^ 2)
+
+R_square <- 1 - (sum(rmse$sq_error) / sum(rmse$deviationfromdata))
+
+"R_square: "
+R_square
+
+RMSE <- sqrt(sum(rmse$sq_error)/length(rmse$sq_error)) # is this correct?
+"RMSE: "
+RMSE
+
+bias <- mean(rmse$modelled_mean) - mean(rmse$obs_value)
+"Bias: "
+bias
+
+sd_ratio <- sd(rmse$modelled_mean) / sd(rmse$obs_value)
+"SD ratio: "
+sd_ratio
 ```
 
-# Further work:
-
-In order to compare modelled vs field data, field observations should be incorporated into the timeseries (either in the same table or in a restructured table), and perform the comparison.
-
-For notes on how such comparison should be done see "Chapter 16. Assessing Model Performance" (Ecological Forecasting, M. Dietze). At minimum, calculate RMSE, correlation, bias and ratio between standard deviations.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+The models have slightly more variability than what it is observed, they predict a little more fluctuations than the ones which actually occur. 
 
 
 
@@ -136,81 +291,81 @@ For notes on how such comparison should be done see "Chapter 16. Assessing Model
 
 Open .nc files
 ```{r}
-cnrm_nc <- nc_open(paste(path, CNRM, sep = ""))
-ichec_nc <- nc_open(paste(path, ICHEC, sep = ""))
-ipsl_nc <- nc_open(paste(path, IPSL, sep = ""))
-mohc_nc <- nc_open(paste(path, MOHC, sep = ""))
-mpi_nc <- nc_open(paste(path, MPI, sep = ""))
+# cnrm_nc <- nc_open(paste(path, CNRM, sep = ""))
+# ichec_nc <- nc_open(paste(path, ICHEC, sep = ""))
+# ipsl_nc <- nc_open(paste(path, IPSL, sep = ""))
+# mohc_nc <- nc_open(paste(path, MOHC, sep = ""))
+# mpi_nc <- nc_open(paste(path, MPI, sep = ""))
 ```
 
 Check variables and nc file structure
 ```{r}
-cnrm_nc
-attributes(cnrm_nc)
-attributes(cnrm_nc$var)
-
-ncvar_get(cnrm_nc, "lat")
-ncvar_get(cnrm_nc, "lon")
-ncvar_get(cnrm_nc)
-
-max(ncvar_get(cnrm_nc, "lon"))
-min(ncvar_get(cnrm_nc, "lon"))
-max(ncvar_get(cnrm_nc, "lat"))
-min(ncvar_get(cnrm_nc, "lat"))
+# cnrm_nc
+# attributes(cnrm_nc)
+# attributes(cnrm_nc$var)
+# 
+# ncvar_get(cnrm_nc, "lat")
+# ncvar_get(cnrm_nc, "lon")
+# ncvar_get(cnrm_nc)
+# 
+# max(ncvar_get(cnrm_nc, "lon"))
+# min(ncvar_get(cnrm_nc, "lon"))
+# max(ncvar_get(cnrm_nc, "lat"))
+# min(ncvar_get(cnrm_nc, "lat"))
 ```
 
 ```{r}
 # Create an array from the nc
-cnrm.array <- ncvar_get(cnrm, "tas")
-mpi.array <- ncvar_get(mpi, "tas")
-
-# Take one slice from the array
-cnrm.slice <- cnrm.array[, , 1] 
-mpi.slice <- mpi.array[, , 1]
+# cnrm.array <- ncvar_get(cnrm_nc, "tas")
+# mpi.array <- ncvar_get(mpi_nc, "tas")
+# 
+# # Take one slice from the array
+# cnrm.slice <- cnrm.array[, , 1] 
+# mpi.slice <- mpi.array[, , 1]
 ```
 
 Single model point timeseries plots:
 ```{r}
-lon <- ncvar_get(cnrm_nc, "lon")
-lat <- ncvar_get(cnrm_nc, "lat", verbose = F)
-lon_index <- which.min(abs(lon - -3.500000)) 
-lat_index <- which.min(abs(lat - 37.05000)) 
-
-# cnrm
-tas_cnrm <- nc.get.var.subset.by.axes(cnrm_nc, "tas", axis.indices = list(X = lon_index, Y = lat_index))
-
-tas_cnrm_time <- nc.get.time.series(cnrm_nc, v = "tas",
-                               time.dim.name = "time")
-data_frame(time = tas_cnrm_time, 
-           tas = as.vector(tas_cnrm)) %>%
-        mutate(time = as.Date(format(time, "%Y-%m-%d"))) %>%
-        ggplot(aes(x = time, y = tas)) + 
-        geom_line() + 
-        xlab("Date") + ylab("Temperature (ºC)") + 
-        theme_classic() +
-        ggtitle("CNRM")
+# lon <- ncvar_get(cnrm_nc, "lon")
+# lat <- ncvar_get(cnrm_nc, "lat", verbose = F)
+# lon_index <- which.min(abs(lon - -3.500000)) 
+# lat_index <- which.min(abs(lat - 37.05000)) 
+# 
+# # cnrm
+# tas_cnrm <- nc.get.var.subset.by.axes(cnrm_nc, "tas", axis.indices = list(X = lon_index, Y = lat_index))
+# 
+# tas_cnrm_time <- nc.get.time.series(cnrm_nc, v = "tas",
+#                                time.dim.name = "time")
+# data_frame(time = tas_cnrm_time, 
+#            tas = as.vector(tas_cnrm)) %>%
+#         mutate(time = as.Date(format(time, "%Y-%m-%d"))) %>%
+#         ggplot(aes(x = time, y = tas)) + 
+#         geom_line() + 
+#         xlab("Date") + ylab("Temperature (ºC)") + 
+#         theme_classic() +
+#         ggtitle("CNRM")
 ```
 
 All models point timeseries dataframe:
 ```{r}
-tas_cnrm <- nc.get.var.subset.by.axes(cnrm_nc, "tas", axis.indices = list(X = lon_index, Y = lat_index))
-tas_ichec <- nc.get.var.subset.by.axes(ichec_nc, "tas", axis.indices = list(X = lon_index, Y = lat_index))
-tas_ipsl <- nc.get.var.subset.by.axes(ipsl_nc, "tas", axis.indices = list(X = lon_index, Y = lat_index))
-tas_mohc <- nc.get.var.subset.by.axes(mohc_nc, "tas", axis.indices = list(X = lon_index, Y = lat_index))
-tas_mpi <- nc.get.var.subset.by.axes(mpi_nc, "tas", axis.indices = list(X = lon_index, Y = lat_index))
-
-ts <- data_frame(cnrm_time = tas_cnrm_time, tas_cnrm = as.vector(tas_cnrm), tas_ichec = as.vector(tas_ichec), tas_ipsl = as.vector(tas_ipsl), tas_mohc = as.vector(tas_mohc), tas_mpi = as.vector(tas_mpi)) %>%
-  mutate(cnrm_time = as.Date(format(cnrm_time, "%Y-%m-%d")))
-
-melted_ts <- melt(ts, id = c("cnrm_time"))
-
-ggplot(melted_ts, aes(x = cnrm_time, y = value, colour = variable)) +
-  geom_line() +
-  xlab("Date") + ylab("Temperature (ºC)") +
-  theme_classic()
+# tas_cnrm <- nc.get.var.subset.by.axes(cnrm_nc, "tas", axis.indices = list(X = lon_index, Y = lat_index))
+# tas_ichec <- nc.get.var.subset.by.axes(ichec_nc, "tas", axis.indices = list(X = lon_index, Y = lat_index))
+# tas_ipsl <- nc.get.var.subset.by.axes(ipsl_nc, "tas", axis.indices = list(X = lon_index, Y = lat_index))
+# tas_mohc <- nc.get.var.subset.by.axes(mohc_nc, "tas", axis.indices = list(X = lon_index, Y = lat_index))
+# tas_mpi <- nc.get.var.subset.by.axes(mpi_nc, "tas", axis.indices = list(X = lon_index, Y = lat_index))
+# 
+# ts <- data_frame(cnrm_time = tas_cnrm_time, tas_cnrm = as.vector(tas_cnrm), tas_ichec = as.vector(tas_ichec), tas_ipsl = as.vector(tas_ipsl), tas_mohc = as.vector(tas_mohc), tas_mpi = as.vector(tas_mpi)) %>%
+#   mutate(cnrm_time = as.Date(format(cnrm_time, "%Y-%m-%d")))
+# 
+# melted_ts <- melt(ts, id = c("cnrm_time"))
+# 
+# ggplot(melted_ts, aes(x = cnrm_time, y = value, colour = variable)) +
+#   geom_line() +
+#   xlab("Date") + ylab("Temperature (ºC)") +
+#   theme_classic()
 ```
 
-Close all
+Close all nc files
 ```{r}
 nc_close(cnrm_nc)
 nc_close(ichec_nc)

@@ -213,7 +213,7 @@ filtered_stations <- filtered_stations %>%
 
 colnames(filtered_stations) <- c("cli_estacion_id", "codigo", "nombre", "long", "lat")
 
-# write.csv(filtered_stations, paste(path, "filtered_stations.csv", sep = ""))
+# write.csv(filtered_stations, paste(path, "Field_Observations/filtered_stations.csv", sep = ""))
 ```
 
 As a result, 56 stations have been discarded since no variable was measured in them, and now "filtered_stations" are 182 stations. Now we would like to download the data from temperature variables coming from this stations and only referring to the historical period (1970-2006), as this is the period to compare with modelled data. The query we want to run is something like this:
@@ -230,6 +230,42 @@ SELECT id, cli_estacion_id, cli_variable_id, valor, fecha, created_at, updated_a
 
 Nevertheless, Linaria keeps having problems and downloading is not possible at the moment.
 
+# Trials with test data
+
+Data from Andrea, sent to LTER. Two datasets:
+
+## Monthly field observations (mfo)
+
+Assuming they refer to monthly mean temperature
+
+```{r}
+mfo <- read.csv("C:/Users/DELL/Downloads/Meterorological_Data/Ejemplo_Resolucion_Mensual/30_temp.csv", sep = ";") # Load data
+
+colnames(mfo) <- c("codigo", "year", "month", "value") # Rename columns
+
+clean_mfo <- inner_join(mfo, filtered_stations, by = "codigo") %>% # select data only from filtered stations
+  select(codigo, year, month, value) %>%
+  filter(year >= 1970) %>% # select data within historical period
+  filter(year <= 2006) # select data within historical period
+
+# write.csv(clean_mfo, paste(path, "Field_Observations/clean_mfo.csv", sep = ""))
+```
+
+## Daily field observations (dfo)
+```{r}
+dfo <- read.csv("C:/Users/DELL/Downloads/Meterorological_Data/Ejemplo_Resolucion_Diaria/30_temperature.csv", sep = ";")
+
+colnames(dfo) <- c("codigo", "year", "month", "day", "value") # Rename columns
+
+clean_dfo <- inner_join(dfo, filtered_stations, by = "codigo") %>% # select data only from filtered stations
+  select(codigo, year, month, day, value) %>%
+  filter(year >= 1970) %>% # select data within historical period
+  filter(year <= 2006) # select data within historical period
+```
+
+**no daily data within historical period...**
+
+
 # Notes for further work
 
-Once Linaria is working, if precious query is too heavy, and extra filtering step could be to check which stations measure any of the desired variables, and discard those stations where no data about temperature is recorded. If these are a lot of stations the query should be much easier to run. 
+Once Linaria is working, if previous query is too heavy, and extra filtering step could be to check which stations measure any of the desired variables, and discard those stations where no data about temperature is recorded. If these are a lot of stations the query should be much easier to run. 
