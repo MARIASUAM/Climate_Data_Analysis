@@ -44,21 +44,31 @@ cv <- function(x) {sd(x)/mean(x)}
   
   Period: 1970-2006 = 36 years
   
-  Datasets (x5 models):
+  Datasets (x5 models)
+  
+  Averages (CDO *command* used):
     
-    yearmean  -> 36 slices (1970, 1971, ... 2005)
+    *yearmean*  -> 36 slices (1970, 1971, ... 2005)
     
-    (season)_mean -> 36 slices (summer 1970, summer 1971, ... summer 2005)
+    *monmean*   -> 36 x 12 = 432 slices (Jan 1970, Feb 1970, ... Dec 2005)
     
-    monmean   -> 36 x 12 = 432 slices (Jan 1970, Feb 1970, ... Dec 2005)
+    *daymin* 
     
-    daymin -> 
+    *daymax* 
+
+    season_mean -> 36 slices:
     
-    daymax -> as daymin
+    	*yearmean -selmon,6,7,8* (sumer_mean)
     
+    	*yearmean -selmon,9,10,11* (fall_mean)
+    
+    	*yearmean -selmon,12,1,2* (winter_mean) **(IS THIS CORRECT?!)**
+    
+    	*yearmean -selmon,3,4,5*	(spring_mean)
+	
 ## Yearmean analysis
 
-Each season .nc file contains the yearly mean mean of the historical period (1970-2006), i.e. 36 slices
+Each year .nc file contains the yearly mean of the historical period (1970-2006), i.e. 36 slices
 
 File names:
 ```{r}
@@ -70,6 +80,7 @@ MPI <-  "temp_MPI_historical_yearmean.nc"
 ```
 
 Select each layer (t = 1, t = 2, ...) of each stack (cnrm, ichec, ipsl, mohc, mpi) and stack with each other, giving 36 stacks (t1,...t36)
+
 ```{r}
 for (i in 1:36) {
   cnrm <- raster(paste(path, CNRM, sep = ""), band = i, varname = "tas")
@@ -401,41 +412,6 @@ cv_data <- calc(data, fun = cv)
 plot(cv_data, main = paste("Coefficient of variation of daily minimum temperature across models at t = ", time, sep = ""), xlab = "Longitude", ylab = "Latitude")
 ```
 
-## Further analysis
-
-Since I would like to use day min and maximum temperatures for my model, I would like to assess how these metrics are simulated in general, for the whole simulation, and not only day per day.
-
-Let's check the first 0 days of the simulation:
-
-Generate raster layers, calculate and plot
-```{r}
-
-for (i in 1:20) {
-  cnrm_layer <- raster(cnrm, layer = i)
-  ichec_layer <- raster(ichec, layer = i)
-  ipsl_layer <- raster(ipsl, layer = i)
-  mohc_layer <- raster(mohc, layer = i)
-  mpi_layer <- raster(mpi, layer = i)
-
-  assign(paste('stddev_', i, sep=''), calc(stack(cnrm_layer, ichec_layer, ipsl_layer, mohc_layer, mpi_layer), fun = sd))
-
-  assign(paste('stderr_', i, sep=''), calc(stack(cnrm_layer, ichec_layer, ipsl_layer, mohc_layer, mpi_layer), fun = stderr))
-
-  assign(paste('cv_', i, sep=''), calc(stack(cnrm_layer, ichec_layer, ipsl_layer, mohc_layer, mpi_layer), fun = cv))
-}
-
-
-sddev_mean <- calc(stack(stddev_1, stddev_2, stddev_3, stddev_4, stddev_5, stddev_6, stddev_7, stddev_8, stddev_9, stddev_10, stddev_11, stddev_12, stddev_13, stddev_14, stddev_15, stddev_16, stddev_17, stddev_18, stddev_19, stddev_20), fun = mean)
-
-stderr_mean <- calc(stack(stderr_1, stderr_2, stderr_3, stderr_4, stderr_5, stderr_6, stderr_7, stderr_8, stderr_9, stderr_10, stderr_11, stderr_12, stderr_13, stderr_14, stderr_15, stderr_16, stderr_17, stderr_18, stderr_19, stderr_20), fun = mean)
-
-cv_mean <- calc(stack(cv_1, cv_2, cv_3, cv_4, cv_5, cv_6, cv_7, cv_8, cv_9, cv_10, cv_11, cv_12, cv_13, cv_14, cv_15, cv_16, cv_17, cv_18, cv_19, cv_20), fun = mean)
-
-plot(cv_mean, main = "Mean of cv", xlab = "Longitude", ylab = "Latitude")
-```
-
-**Note**: is this the right way to do this analysis? further work is needed, but some feedback from expert would be highly desirable...
-
 ### Daymax
 
 File names:
@@ -481,12 +457,42 @@ cv_data <- calc(data, fun = cv)
 plot(cv_data, main = paste("Coefficient of variation of daily maximum temperature across models at t = ", time, sep = ""), xlab = "Longitude", ylab = "Latitude")
 ```
 
+## Further analysis
+
+Since I would like to use day min and maximum temperatures for my model, I would like to assess how these metrics are simulated in general, for the whole simulation, and not only day per day.
+
+Let's check the first 20 days of the simulation:
+
+Generate raster layers, calculate and plot
+```{r}
+
+for (i in 1:20) {
+  cnrm_layer <- raster(cnrm, layer = i)
+  ichec_layer <- raster(ichec, layer = i)
+  ipsl_layer <- raster(ipsl, layer = i)
+  mohc_layer <- raster(mohc, layer = i)
+  mpi_layer <- raster(mpi, layer = i)
+
+  assign(paste('stddev_', i, sep=''), calc(stack(cnrm_layer, ichec_layer, ipsl_layer, mohc_layer, mpi_layer), fun = sd))
+
+  assign(paste('stderr_', i, sep=''), calc(stack(cnrm_layer, ichec_layer, ipsl_layer, mohc_layer, mpi_layer), fun = stderr))
+
+  assign(paste('cv_', i, sep=''), calc(stack(cnrm_layer, ichec_layer, ipsl_layer, mohc_layer, mpi_layer), fun = cv))
+}
+
+
+sddev_mean <- calc(stack(stddev_1, stddev_2, stddev_3, stddev_4, stddev_5, stddev_6, stddev_7, stddev_8, stddev_9, stddev_10, stddev_11, stddev_12, stddev_13, stddev_14, stddev_15, stddev_16, stddev_17, stddev_18, stddev_19, stddev_20), fun = mean)
+
+stderr_mean <- calc(stack(stderr_1, stderr_2, stderr_3, stderr_4, stderr_5, stderr_6, stderr_7, stderr_8, stderr_9, stderr_10, stderr_11, stderr_12, stderr_13, stderr_14, stderr_15, stderr_16, stderr_17, stderr_18, stderr_19, stderr_20), fun = mean)
+
+cv_mean <- calc(stack(cv_1, cv_2, cv_3, cv_4, cv_5, cv_6, cv_7, cv_8, cv_9, cv_10, cv_11, cv_12, cv_13, cv_14, cv_15, cv_16, cv_17, cv_18, cv_19, cv_20), fun = mean)
+
+plot(cv_mean, main = "Mean of cv", xlab = "Longitude", ylab = "Latitude")
+```
+
+**Note**: is this the right way to do this analysis? further work is needed, but some feedback from expert would be highly desirable...
 
 # Precipitation
 
 (TO DO)
-
-
-
-
 

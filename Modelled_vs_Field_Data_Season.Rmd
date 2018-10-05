@@ -1,0 +1,880 @@
+---
+title: "Modelled vs Field Data"
+output:
+  word_document: default
+  pdf_document: default
+---
+
+# Setting up:
+
+Load libraries:
+```{r}
+library(dplyr)
+library(ggplot2)
+library(ncdf4)
+library(ncdf4.helpers)
+library(reshape2)
+```
+
+Set working directory:
+```{r}
+path <- "D:/Maria/Proyectos/ECOPOTENTIAL_FUTURE_PROJECTIONS/" # María
+# path <- "..." # Ricardo
+```
+
+# Description
+
+Once models are compared with each other to assess spread and uncertainty (see "Model intercomparison.Rmd"), modelled data should be compared with field observations to assess model performance/model error. Field observations were downloaded from Linaria database. Documentation of this process (selection of stations, variables, queries, filters,...) can be found in "Field_Data.Rmd". 
+
+Once field observations are downloaded, modelled and field data can be compared. For notes on how such comparison should be done see "Chapter 16. Assessing Model Performance" (Ecological Forecasting, M. Dietze). At minimum, calculate RMSE, correlation, bias and ratio between standard deviations.
+
+# Extract pixels indexes where there are stations
+
+We select only the stations where we know some variables are being measured during the historical period (hist_stations). In the file "filtered_stations", coming from a previous query (see "Field_Data.Rmd") we have the coordinates of the stations.
+
+All stations:
+```{r}
+filt_stations <- "filtered_stations.csv"
+filt_stations <- read.csv(paste(path, "Field_Observations/", filt_stations, sep = ""), sep = ",")
+filt_stations <- filt_stations %>%
+  select(cli_estacion_id, codigo, nombre, long, lat)
+```
+
+Hist stations
+```{r}
+hist_stations <- "hist_stations.csv"
+hist_stations <- read.csv(paste(path, "Field_Observations/", hist_stations, sep = ""), sep = ",")
+```
+
+Hist stations coordinates
+```{r}
+stations <- left_join(hist_stations, filt_stations, by = "cli_estacion_id")
+```
+
+There are inconsistencies, since 3 stations (50, 267, 408) in "hist_stations" are not in "filtered_stations" and therefore we do not have their coordinates. But let's see if these stations record data and we have not discard them due to nonsense data, because otherwise it is not a problem to not have their coordinates. 
+
+```{r}
+folder <- "Field_Observations/" # María
+calc_dmean <- read.csv(paste(path, folder, "calc_dmean.csv", sep = ""), sep = ",")
+calc_dmean <- calc_dmean %>%
+  select(cli_estacion_id, year, month, day, dmean) %>%
+  mutate(cli_estacion_id = as.factor(cli_estacion_id))
+
+im_stations <- data.frame(unique(calc_dmean$cli_estacion_id))
+```
+
+im_stations does not contain stations 50, 267 or 408, so it is not a problem that we do not have their coordinates.
+
+Modelled data - All models have the same long and lat, I open a random one:
+```{r}
+CNRM <- "temp_CNRM_historical_spring_mean.nc"
+cnrm_nc <- nc_open(paste(path, "Outputs_201807/", CNRM, sep = ""))
+```
+
+Extract pixel indexes:
+```{r}
+lon <- ncvar_get(cnrm_nc, "lon")
+lat <- ncvar_get(cnrm_nc, "lat", verbose = F)
+
+# nc files have associated indexes for latitude and longitud to identy each pixel, so each station will have associated the indexes of the pixel where it stands
+stations$pixel_lat_index <- c()
+stations$pixel_lon_index <- c()
+
+for (i in 1:length(stations$cli_estacion_id)) {
+  lat_value <- stations$lat[i]
+  lon_value <- stations$lon[i]
+  
+  stations$pixel_index_lat[i] <- which.min(abs(lat - lat_value)) # índice más pequeño del vector que forma la diferencia absoluta entre lat y lat_value - es decir, busca dónde está el valor más cercano a 0 y da el índice de ese elemento.
+  stations$pixel_index_lon[i] <- which.min(abs(lon - lon_value))
+}
+```
+
+# Generate data frames for each (daymin, daymax, monthmean, seasonmean, yearmean) containing time series of all stations
+ 
+*Note* should this df has the mean of the 5 models or the date of the 5 models separately? Options:
+
+  - df containing the 5 models (then an extra column indicating the model would be necessary, or each model data would be in one column), 
+  
+  - df containing the average of the 5 models (then such average should be calculated, and maybe an extra parameter indicating variability should be included)
+
+I decide to construct the df containing one column per model + mean + sd among values, so that when I include the observations as an extra column comparison can be easily done for each model individually or for the mean of them.
+
+## Spring data
+
+Load modelled data:
+```{r}
+CNRM <- "temp_CNRM_historical_spring_mean.nc"
+cnrm_nc <- nc_open(paste(path, "Outputs_201807/", CNRM, sep = ""))
+
+ICHEC <- "temp_ICHEC_historical_spring_mean.nc"
+ichec_nc <- nc_open(paste(path, "Outputs_201807/", ICHEC, sep = ""))
+
+IPSL <- "temp_IPSL_historical_spring_mean.nc"
+ipsl_nc <- nc_open(paste(path, "Outputs_201807/", IPSL, sep = ""))
+
+MOHC <- "temp_MOHC_historical_spring_mean.nc"
+mohc_nc <- nc_open(paste(path, "Outputs_201807/", MOHC, sep = ""))
+
+MPI <- "temp_MPI_historical_spring_mean.nc"
+mpi_nc <- nc_open(paste(path, "Outputs_201807/", MPI, sep = ""))
+```
+
+Generate models time series
+```{r}
+timeseries <- data.frame()
+
+for (i in 1:length(stations$cli_estacion_id)) {
+  # Collect "tas" time series for each model
+  tas_cnrm <- nc.get.var.subset.by.axes(cnrm_nc, "tas", axis.indices = list(X = stations$pixel_index_lon[i], Y = stations$pixel_index_lat[i]))
+  tas_ichec <- nc.get.var.subset.by.axes(ichec_nc, "tas", axis.indices = list(X = stations$pixel_index_lon[i], Y = stations$pixel_index_lat[i]))
+  tas_ipsl <- nc.get.var.subset.by.axes(ipsl_nc, "tas", axis.indices = list(X = stations$pixel_index_lon[i], Y = stations$pixel_index_lat[i]))
+  tas_mohc <- nc.get.var.subset.by.axes(mohc_nc, "tas", axis.indices = list(X = stations$pixel_index_lon[i], Y = stations$pixel_index_lat[i]))
+  tas_mpi <- nc.get.var.subset.by.axes(mpi_nc, "tas", axis.indices = list(X = stations$pixel_index_lon[i], Y = stations$pixel_index_lat[i]))
+  
+  # Collect "time" time series for each model - although all are monthly means, apparently the time point to which the data is linked is not the same for all models. However, they do refer to the same month and year, so only one time timeseries will be used
+  tas_cnrm_time <- nc.get.time.series(cnrm_nc, v = "tas",
+                               time.dim.name = "time")
+  # tas_ichec_time <- nc.get.time.series(ichec_nc, v = "tas",
+  #                              time.dim.name = "time")
+  # tas_ipsl_time <- nc.get.time.series(ipsl_nc, v = "tas",
+  #                              time.dim.name = "time")
+  # tas_mohc_time <- nc.get.time.series(mohc_nc, v = "tas",
+  #                              time.dim.name = "time")
+  # tas_mpi_time <- nc.get.time.series(mpi_nc, v = "tas",
+  #                              time.dim.name = "time")
+    
+  temp <- data_frame(time_cnrm = tas_cnrm_time,
+                     tas_cnrm = as.vector(tas_cnrm),
+                     # time_ichec = tas_ichec_time,
+                     tas_ichec = as.vector(tas_ichec),
+                     # time_ipsl = tas_ipsl_time,
+                     tas_ipsl = as.vector(tas_ipsl),
+                     # time_mohc = tas_mohc_time,
+                     tas_mohc = as.vector(tas_mohc),
+                     # time_mpi = tas_mpi_time,
+                     tas_mpi = as.vector(tas_mpi),
+                     cli_estacion_id = stations$cli_estacion_id[i],
+                     codigo = stations$codigo[i])
+  
+  timeseries <- rbind(timeseries, temp)
+}
+```
+
+Fetch time series
+```{r}
+timeseries <- timeseries %>%
+  mutate(time_cnrm = as.Date(format(time_cnrm, "%Y-%m-%d"))) %>%
+  mutate(springyear = as.integer(format(time_cnrm,"%Y"))) %>%
+  select(codigo, cli_estacion_id, time_cnrm, springyear, tas_cnrm, tas_ichec, tas_ipsl, tas_mohc, tas_mpi) %>%
+  mutate(codigo = as.character(codigo)) %>%
+  mutate(cli_estacion_id = as.factor(cli_estacion_id))
+```
+
+## Add field observations to time series dataframe
+```{r}
+spring <- read.csv(paste(path, folder, "spring_mean.csv", sep = ""))
+
+spring <- spring %>%
+  mutate(obs_value = spring_mean) %>%
+  mutate(springyear = year) %>%
+  select(cli_estacion_id, springyear, obs_value) %>%
+  mutate(cli_estacion_id = as.factor(cli_estacion_id)) 
+
+spring_ts <- inner_join(spring, timeseries)
+```
+
+Add metrics
+```{r}
+spring_ts <- spring_ts %>%
+  mutate(modelled_mean = ((tas_cnrm + tas_ichec + tas_ipsl + tas_mohc + tas_mpi) / 5)) %>%
+  mutate(modelled_sd = (sqrt((((tas_cnrm - modelled_mean) ^ 2) + ((tas_ichec - modelled_mean) ^ 2) + ((tas_ipsl - modelled_mean) ^ 2) + ((tas_mohc - modelled_mean) ^ 2) + ((tas_mpi - modelled_mean) ^ 2)) / 4)))
+```
+
+Plotting - qualitative exploration
+
+Modelled vs observations: mean of models
+```{r}
+ggplot(spring_ts, aes(x = modelled_mean, y = obs_value, colour = codigo)) +
+  geom_point() + 
+  xlab("Predicted value") + ylab("Observed value") + 
+  theme(legend.position="none") +
+  ggtitle("Comparison of spring mean temperature predicted (mean across models) and observed values") +
+  geom_abline(slope = 1, intercept = 0)
+```
+
+Modelled vs observations: one model
+```{r}
+ggplot(spring_ts, aes(x = tas_ipsl, y = obs_value, colour = codigo)) +
+  geom_point() + 
+  xlab("Predicted value") + ylab("Observed value") + 
+  theme(legend.position="none") +
+  ggtitle("Comparison of spring mean temperature predicted by model IPSL and observed") +
+  geom_abline(slope = 1, intercept = 0)
+```
+
+Modelled vs observations: one-station time series
+```{r}
+selection <- spring_ts %>%
+  filter(codigo == "E190") %>%
+  select(time_cnrm, obs_value, modelled_mean) %>%
+  melt(id = c("time_cnrm"))
+
+ggplot(data = selection, aes(x = time_cnrm, y = value, colour = variable)) +
+  geom_line() + 
+  xlab("Year") + ylab("Spring mean temperature (ºC)") + 
+  theme() +
+  ggtitle("Time series for station E190: observed and modelled") +
+  scale_y_continuous(limits=c(0, 30))
+```
+
+Modelled vs observations: all-stations time series all models and mean
+```{r}
+reshaped_ts <- melt(spring_ts, id = c("codigo", "springyear", "time_cnrm")) %>%
+  filter(variable != "modelled_sd") %>%
+  filter(variable != "cli_estacion_id") %>%
+  mutate(codigo = as.factor(codigo)) %>%
+  mutate(value = as.numeric(value))
+  
+ggplot(reshaped_ts, aes(x = time_cnrm, y = value, colour = codigo)) +
+  geom_point() +
+  xlab("Date") + ylab("Temperature (ºC)") +
+  theme_classic() 
+```
+
+Quantitative analysis
+
+Following "Chapter 16. Assessing Model Performance" (Ecological Forecasting, M. Dietze). 
+
+Correlations between observations and predicted values: per model and against modelled mean
+```{r}
+a <- cor.test(spring_ts$obs_value, spring_ts$tas_cnrm)
+b <- cor.test(spring_ts$obs_value, spring_ts$tas_ichec)
+c <- cor.test(spring_ts$obs_value, spring_ts$tas_ipsl)
+d <- cor.test(spring_ts$obs_value, spring_ts$tas_mohc)
+e <- cor.test(spring_ts$obs_value, spring_ts$tas_mpi)
+f <- cor.test(spring_ts$obs_value, spring_ts$modelled_mean)         
+
+names <- c("CNRM", "ICHEC", "IPSL", "MOHC", "MPI", "Models mean")
+correlations <- c(a$estimate, b$estimate, c$estimate, d$estimate, e$estimate, f$estimate)
+ci_1 <- c(a$conf.int[1], b$conf.int[1], c$conf.int[1], d$conf.int[1], e$conf.int[1], f$conf.int[1])
+ci_2 <- c(a$conf.int[2], b$conf.int[2], c$conf.int[2], d$conf.int[2], e$conf.int[2], f$conf.int[2])
+
+cor_table <- data.frame(names, correlations, ci_1, ci_2)
+cor_table
+
+ggplot(data = cor_table) +
+  geom_errorbar(mapping=aes(x = names, ymin = ci_1, ymax = ci_2)) +
+  geom_point(mapping=aes(x = names, y = correlations)) +
+  xlab(NULL) +
+  ylab("Pearson's correlation coefficient") +
+  ggtitle("Correlations modelled vs field observations")
+  
+```
+
+Root Mean Square Error (RMSE), Root Square, Bias and SD ratio
+
+*Calculated only for the mean of all five models, not for each model independently*
+
+```{r}
+meanofobservationdata <- mean(spring_ts$obs_value)
+
+rmse <- spring_ts %>%
+  select(codigo, springyear, obs_value, modelled_mean, modelled_sd) %>%
+  mutate(sq_error = (modelled_mean - obs_value) ^ 2) %>%
+  mutate(deviationfromdata = (obs_value - meanofobservationdata) ^ 2)
+
+R_square <- 1 - (sum(rmse$sq_error) / sum(rmse$deviationfromdata))
+
+"R_square: "
+R_square
+
+RMSE <- sqrt(sum(rmse$sq_error)/length(rmse$sq_error)) # is this correct?
+"RMSE: "
+RMSE
+
+bias <- mean(rmse$modelled_mean) - mean(rmse$obs_value)
+"Bias: "
+bias
+
+sd_ratio <- sd(rmse$modelled_mean) / sd(rmse$obs_value)
+"SD ratio: "
+sd_ratio
+```
+
+# INTERPRET RESULTS - TO DO
+
+## Summer data
+
+```{r}
+# Load modelled data:
+CNRM <- "temp_CNRM_historical_summer_mean.nc"
+cnrm_nc <- nc_open(paste(path, "Outputs_201807/", CNRM, sep = ""))
+
+ICHEC <- "temp_ICHEC_historical_summer_mean.nc"
+ichec_nc <- nc_open(paste(path, "Outputs_201807/", ICHEC, sep = ""))
+
+IPSL <- "temp_IPSL_historical_summer_mean.nc"
+ipsl_nc <- nc_open(paste(path, "Outputs_201807/", IPSL, sep = ""))
+
+MOHC <- "temp_MOHC_historical_summer_mean.nc"
+mohc_nc <- nc_open(paste(path, "Outputs_201807/", MOHC, sep = ""))
+
+MPI <- "temp_MPI_historical_summer_mean.nc"
+mpi_nc <- nc_open(paste(path, "Outputs_201807/", MPI, sep = ""))
+
+# Generate models time series
+timeseries <- data.frame()
+
+for (i in 1:length(stations$cli_estacion_id)) {
+  # Collect "tas" time series for each model
+  tas_cnrm <- nc.get.var.subset.by.axes(cnrm_nc, "tas", axis.indices = list(X = stations$pixel_index_lon[i], Y = stations$pixel_index_lat[i]))
+  tas_ichec <- nc.get.var.subset.by.axes(ichec_nc, "tas", axis.indices = list(X = stations$pixel_index_lon[i], Y = stations$pixel_index_lat[i]))
+  tas_ipsl <- nc.get.var.subset.by.axes(ipsl_nc, "tas", axis.indices = list(X = stations$pixel_index_lon[i], Y = stations$pixel_index_lat[i]))
+  tas_mohc <- nc.get.var.subset.by.axes(mohc_nc, "tas", axis.indices = list(X = stations$pixel_index_lon[i], Y = stations$pixel_index_lat[i]))
+  tas_mpi <- nc.get.var.subset.by.axes(mpi_nc, "tas", axis.indices = list(X = stations$pixel_index_lon[i], Y = stations$pixel_index_lat[i]))
+  
+  # Collect "time" time series for each model - although all are monthly means, apparently the time point to which the data is linked is not the same for all models. However, they do refer to the same month and year, so only one time timeseries will be used
+  tas_cnrm_time <- nc.get.time.series(cnrm_nc, v = "tas",
+                               time.dim.name = "time")
+  # tas_ichec_time <- nc.get.time.series(ichec_nc, v = "tas",
+  #                              time.dim.name = "time")
+  # tas_ipsl_time <- nc.get.time.series(ipsl_nc, v = "tas",
+  #                              time.dim.name = "time")
+  # tas_mohc_time <- nc.get.time.series(mohc_nc, v = "tas",
+  #                              time.dim.name = "time")
+  # tas_mpi_time <- nc.get.time.series(mpi_nc, v = "tas",
+  #                              time.dim.name = "time")
+    
+  temp <- data_frame(time_cnrm = tas_cnrm_time,
+                     tas_cnrm = as.vector(tas_cnrm),
+                     # time_ichec = tas_ichec_time,
+                     tas_ichec = as.vector(tas_ichec),
+                     # time_ipsl = tas_ipsl_time,
+                     tas_ipsl = as.vector(tas_ipsl),
+                     # time_mohc = tas_mohc_time,
+                     tas_mohc = as.vector(tas_mohc),
+                     # time_mpi = tas_mpi_time,
+                     tas_mpi = as.vector(tas_mpi),
+                     cli_estacion_id = stations$cli_estacion_id[i],
+                     codigo = stations$codigo[i])
+  
+  timeseries <- rbind(timeseries, temp)
+}
+
+# Fetch time series
+timeseries <- timeseries %>%
+  mutate(time_cnrm = as.Date(format(time_cnrm, "%Y-%m-%d"))) %>%
+  mutate(summeryear = as.integer(format(time_cnrm,"%Y"))) %>%
+  select(codigo, cli_estacion_id, time_cnrm, summeryear, tas_cnrm, tas_ichec, tas_ipsl, tas_mohc, tas_mpi) %>%
+  mutate(codigo = as.character(codigo)) %>%
+  mutate(cli_estacion_id = as.factor(cli_estacion_id))
+
+# Add field observations to time series dataframe
+summer <- read.csv(paste(path, folder, "summer_mean.csv", sep = ""))
+
+summer <- summer %>%
+  mutate(obs_value = summer_mean) %>%
+  mutate(summeryear = year) %>%
+  select(cli_estacion_id, summeryear, obs_value) %>%
+  mutate(cli_estacion_id = as.factor(cli_estacion_id)) 
+
+summer_ts <- inner_join(summer, timeseries)
+
+# Add metrics
+summer_ts <- summer_ts %>%
+  mutate(modelled_mean = ((tas_cnrm + tas_ichec + tas_ipsl + tas_mohc + tas_mpi) / 5)) %>%
+  mutate(modelled_sd = (sqrt((((tas_cnrm - modelled_mean) ^ 2) + ((tas_ichec - modelled_mean) ^ 2) + ((tas_ipsl - modelled_mean) ^ 2) + ((tas_mohc - modelled_mean) ^ 2) + ((tas_mpi - modelled_mean) ^ 2)) / 4)))
+```
+
+Plotting - qualitative exploration
+
+Modelled vs observations: mean of models
+```{r}
+ggplot(summer_ts, aes(x = modelled_mean, y = obs_value, colour = codigo)) +
+  geom_point() + 
+  xlab("Predicted value") + ylab("Observed value") + 
+  theme(legend.position="none") +
+  ggtitle("Comparison of summer mean temperature predicted (mean across models) and observed values") +
+  geom_abline(slope = 1, intercept = 0)
+```
+
+Modelled vs observations: one model
+```{r}
+ggplot(summer_ts, aes(x = tas_ipsl, y = obs_value, colour = codigo)) +
+  geom_point() + 
+  xlab("Predicted value") + ylab("Observed value") + 
+  theme(legend.position="none") +
+  ggtitle("Comparison of summer mean temperature predicted by model IPSL and observed") +
+  geom_abline(slope = 1, intercept = 0)
+```
+
+Modelled vs observations: one-station time series
+```{r}
+selection <- summer_ts %>%
+  filter(codigo == "E190") %>%
+  select(time_cnrm, obs_value, modelled_mean) %>%
+  melt(id = c("time_cnrm"))
+
+ggplot(data = selection, aes(x = time_cnrm, y = value, colour = variable)) +
+  geom_line() + 
+  xlab("Year") + ylab("Summer mean temperature (ºC)") + 
+  theme() +
+  ggtitle("Time series for station E190: observed and modelled") +
+  scale_y_continuous(limits=c(0, 30))
+```
+
+Modelled vs observations: all-stations time series all models and mean
+```{r}
+reshaped_ts <- melt(summer_ts, id = c("codigo", "summeryear", "time_cnrm")) %>%
+  filter(variable != "modelled_sd") %>%
+  filter(variable != "cli_estacion_id") %>%
+  mutate(codigo = as.factor(codigo)) %>%
+  mutate(value = as.numeric(value))
+  
+ggplot(reshaped_ts, aes(x = time_cnrm, y = value, colour = codigo)) +
+  geom_point() +
+  xlab("Date") + ylab("Temperature (ºC)") +
+  theme_classic() 
+```
+
+Quantitative analysis
+
+Following "Chapter 16. Assessing Model Performance" (Ecological Forecasting, M. Dietze). 
+
+```{r}
+# Correlations between observations and predicted values: per model and against modelled mean
+a <- cor.test(summer_ts$obs_value, summer_ts$tas_cnrm)
+b <- cor.test(summer_ts$obs_value, summer_ts$tas_ichec)
+c <- cor.test(summer_ts$obs_value, summer_ts$tas_ipsl)
+d <- cor.test(summer_ts$obs_value, summer_ts$tas_mohc)
+e <- cor.test(summer_ts$obs_value, summer_ts$tas_mpi)
+f <- cor.test(summer_ts$obs_value, summer_ts$modelled_mean)         
+
+names <- c("CNRM", "ICHEC", "IPSL", "MOHC", "MPI", "Models mean")
+correlations <- c(a$estimate, b$estimate, c$estimate, d$estimate, e$estimate, f$estimate)
+ci_1 <- c(a$conf.int[1], b$conf.int[1], c$conf.int[1], d$conf.int[1], e$conf.int[1], f$conf.int[1])
+ci_2 <- c(a$conf.int[2], b$conf.int[2], c$conf.int[2], d$conf.int[2], e$conf.int[2], f$conf.int[2])
+
+cor_table <- data.frame(names, correlations, ci_1, ci_2)
+cor_table
+
+ggplot(data = cor_table) +
+  geom_errorbar(mapping=aes(x = names, ymin = ci_1, ymax = ci_2)) +
+  geom_point(mapping=aes(x = names, y = correlations)) +
+  xlab(NULL) +
+  ylab("Pearson's correlation coefficient") +
+  ggtitle("Correlations modelled vs field observations")
+  
+# Root Mean Square Error (RMSE), Root Square, Bias and SD ratio
+# *Calculated only for the mean of all five models, not for each model independently*
+  
+meanofobservationdata <- mean(summer_ts$obs_value)
+
+rmse <- summer_ts %>%
+  select(codigo, summeryear, obs_value, modelled_mean, modelled_sd) %>%
+  mutate(sq_error = (modelled_mean - obs_value) ^ 2) %>%
+  mutate(deviationfromdata = (obs_value - meanofobservationdata) ^ 2)
+
+R_square <- 1 - (sum(rmse$sq_error) / sum(rmse$deviationfromdata))
+
+"R_square: "
+R_square
+
+RMSE <- sqrt(sum(rmse$sq_error)/length(rmse$sq_error)) # is this correct?
+"RMSE: "
+RMSE
+
+bias <- mean(rmse$modelled_mean) - mean(rmse$obs_value)
+"Bias: "
+bias
+
+sd_ratio <- sd(rmse$modelled_mean) / sd(rmse$obs_value)
+"SD ratio: "
+sd_ratio
+```
+
+# INTERPRET RESULTS - TO DO
+
+## Fall data
+
+```{r}
+# Load modelled data:
+CNRM <- "temp_CNRM_historical_fall_mean.nc"
+cnrm_nc <- nc_open(paste(path, "Outputs_201807/", CNRM, sep = ""))
+
+ICHEC <- "temp_ICHEC_historical_fall_mean.nc"
+ichec_nc <- nc_open(paste(path, "Outputs_201807/", ICHEC, sep = ""))
+
+IPSL <- "temp_IPSL_historical_fall_mean.nc"
+ipsl_nc <- nc_open(paste(path, "Outputs_201807/", IPSL, sep = ""))
+
+MOHC <- "temp_MOHC_historical_fall_mean.nc"
+mohc_nc <- nc_open(paste(path, "Outputs_201807/", MOHC, sep = ""))
+
+MPI <- "temp_MPI_historical_fall_mean.nc"
+mpi_nc <- nc_open(paste(path, "Outputs_201807/", MPI, sep = ""))
+
+# Generate models time series
+timeseries <- data.frame()
+
+for (i in 1:length(stations$cli_estacion_id)) {
+  # Collect "tas" time series for each model
+  tas_cnrm <- nc.get.var.subset.by.axes(cnrm_nc, "tas", axis.indices = list(X = stations$pixel_index_lon[i], Y = stations$pixel_index_lat[i]))
+  tas_ichec <- nc.get.var.subset.by.axes(ichec_nc, "tas", axis.indices = list(X = stations$pixel_index_lon[i], Y = stations$pixel_index_lat[i]))
+  tas_ipsl <- nc.get.var.subset.by.axes(ipsl_nc, "tas", axis.indices = list(X = stations$pixel_index_lon[i], Y = stations$pixel_index_lat[i]))
+  tas_mohc <- nc.get.var.subset.by.axes(mohc_nc, "tas", axis.indices = list(X = stations$pixel_index_lon[i], Y = stations$pixel_index_lat[i]))
+  tas_mpi <- nc.get.var.subset.by.axes(mpi_nc, "tas", axis.indices = list(X = stations$pixel_index_lon[i], Y = stations$pixel_index_lat[i]))
+  
+  # Collect "time" time series for each model - although all are monthly means, apparently the time point to which the data is linked is not the same for all models. However, they do refer to the same month and year, so only one time timeseries will be used
+  tas_cnrm_time <- nc.get.time.series(cnrm_nc, v = "tas",
+                               time.dim.name = "time")
+  # tas_ichec_time <- nc.get.time.series(ichec_nc, v = "tas",
+  #                              time.dim.name = "time")
+  # tas_ipsl_time <- nc.get.time.series(ipsl_nc, v = "tas",
+  #                              time.dim.name = "time")
+  # tas_mohc_time <- nc.get.time.series(mohc_nc, v = "tas",
+  #                              time.dim.name = "time")
+  # tas_mpi_time <- nc.get.time.series(mpi_nc, v = "tas",
+  #                              time.dim.name = "time")
+    
+  temp <- data_frame(time_cnrm = tas_cnrm_time,
+                     tas_cnrm = as.vector(tas_cnrm),
+                     # time_ichec = tas_ichec_time,
+                     tas_ichec = as.vector(tas_ichec),
+                     # time_ipsl = tas_ipsl_time,
+                     tas_ipsl = as.vector(tas_ipsl),
+                     # time_mohc = tas_mohc_time,
+                     tas_mohc = as.vector(tas_mohc),
+                     # time_mpi = tas_mpi_time,
+                     tas_mpi = as.vector(tas_mpi),
+                     cli_estacion_id = stations$cli_estacion_id[i],
+                     codigo = stations$codigo[i])
+  
+  timeseries <- rbind(timeseries, temp)
+}
+
+# Fetch time series
+timeseries <- timeseries %>%
+  mutate(time_cnrm = as.Date(format(time_cnrm, "%Y-%m-%d"))) %>%
+  mutate(fallyear = as.integer(format(time_cnrm,"%Y"))) %>%
+  select(codigo, cli_estacion_id, time_cnrm, fallyear, tas_cnrm, tas_ichec, tas_ipsl, tas_mohc, tas_mpi) %>%
+  mutate(codigo = as.character(codigo)) %>%
+  mutate(cli_estacion_id = as.factor(cli_estacion_id))
+
+# Add field observations to time series dataframe
+fall <- read.csv(paste(path, folder, "fall_mean.csv", sep = ""))
+
+fall <- fall %>%
+  mutate(obs_value = fall_mean) %>%
+  mutate(fallyear = year) %>%
+  select(cli_estacion_id, fallyear, obs_value) %>%
+  mutate(cli_estacion_id = as.factor(cli_estacion_id)) 
+
+fall_ts <- inner_join(fall, timeseries)
+
+# Add metrics
+fall_ts <- fall_ts %>%
+  mutate(modelled_mean = ((tas_cnrm + tas_ichec + tas_ipsl + tas_mohc + tas_mpi) / 5)) %>%
+  mutate(modelled_sd = (sqrt((((tas_cnrm - modelled_mean) ^ 2) + ((tas_ichec - modelled_mean) ^ 2) + ((tas_ipsl - modelled_mean) ^ 2) + ((tas_mohc - modelled_mean) ^ 2) + ((tas_mpi - modelled_mean) ^ 2)) / 4)))
+```
+
+Plotting - qualitative exploration
+
+Modelled vs observations: mean of models
+```{r}
+ggplot(fall_ts, aes(x = modelled_mean, y = obs_value, colour = codigo)) +
+  geom_point() + 
+  xlab("Predicted value") + ylab("Observed value") + 
+  theme(legend.position="none") +
+  ggtitle("Comparison of fall mean temperature predicted (mean across models) and observed values") +
+  geom_abline(slope = 1, intercept = 0)
+```
+
+Modelled vs observations: one model
+```{r}
+ggplot(fall_ts, aes(x = tas_ipsl, y = obs_value, colour = codigo)) +
+  geom_point() + 
+  xlab("Predicted value") + ylab("Observed value") + 
+  theme(legend.position="none") +
+  ggtitle("Comparison of fall mean temperature predicted by model IPSL and observed") +
+  geom_abline(slope = 1, intercept = 0)
+```
+
+Modelled vs observations: one-station time series
+```{r}
+selection <- fall_ts %>%
+  filter(codigo == "E190") %>%
+  select(time_cnrm, obs_value, modelled_mean) %>%
+  melt(id = c("time_cnrm"))
+
+ggplot(data = selection, aes(x = time_cnrm, y = value, colour = variable)) +
+  geom_line() + 
+  xlab("Year") + ylab("Fall mean temperature (ºC)") + 
+  theme() +
+  ggtitle("Time series for station E190: observed and modelled") +
+  scale_y_continuous(limits=c(0, 30))
+```
+
+Modelled vs observations: all-stations time series all models and mean
+```{r}
+reshaped_ts <- melt(fall_ts, id = c("codigo", "fallyear", "time_cnrm")) %>%
+  filter(variable != "modelled_sd") %>%
+  filter(variable != "cli_estacion_id") %>%
+  mutate(codigo = as.factor(codigo)) %>%
+  mutate(value = as.numeric(value))
+  
+ggplot(reshaped_ts, aes(x = time_cnrm, y = value, colour = codigo)) +
+  geom_point() +
+  xlab("Date") + ylab("Temperature (ºC)") +
+  theme_classic() 
+```
+
+Quantitative analysis
+
+Following "Chapter 16. Assessing Model Performance" (Ecological Forecasting, M. Dietze). 
+
+```{r}
+# Correlations between observations and predicted values: per model and against modelled mean
+a <- cor.test(fall_ts$obs_value, fall_ts$tas_cnrm)
+b <- cor.test(fall_ts$obs_value, fall_ts$tas_ichec)
+c <- cor.test(fall_ts$obs_value, fall_ts$tas_ipsl)
+d <- cor.test(fall_ts$obs_value, fall_ts$tas_mohc)
+e <- cor.test(fall_ts$obs_value, fall_ts$tas_mpi)
+f <- cor.test(fall_ts$obs_value, fall_ts$modelled_mean)         
+
+names <- c("CNRM", "ICHEC", "IPSL", "MOHC", "MPI", "Models mean")
+correlations <- c(a$estimate, b$estimate, c$estimate, d$estimate, e$estimate, f$estimate)
+ci_1 <- c(a$conf.int[1], b$conf.int[1], c$conf.int[1], d$conf.int[1], e$conf.int[1], f$conf.int[1])
+ci_2 <- c(a$conf.int[2], b$conf.int[2], c$conf.int[2], d$conf.int[2], e$conf.int[2], f$conf.int[2])
+
+cor_table <- data.frame(names, correlations, ci_1, ci_2)
+cor_table
+
+ggplot(data = cor_table) +
+  geom_errorbar(mapping=aes(x = names, ymin = ci_1, ymax = ci_2)) +
+  geom_point(mapping=aes(x = names, y = correlations)) +
+  xlab(NULL) +
+  ylab("Pearson's correlation coefficient") +
+  ggtitle("Correlations modelled vs field observations")
+  
+# Root Mean Square Error (RMSE), Root Square, Bias and SD ratio
+# *Calculated only for the mean of all five models, not for each model independently*
+  
+meanofobservationdata <- mean(fall_ts$obs_value)
+
+rmse <- fall_ts %>%
+  select(codigo, fallyear, obs_value, modelled_mean, modelled_sd) %>%
+  mutate(sq_error = (modelled_mean - obs_value) ^ 2) %>%
+  mutate(deviationfromdata = (obs_value - meanofobservationdata) ^ 2)
+
+R_square <- 1 - (sum(rmse$sq_error) / sum(rmse$deviationfromdata))
+
+"R_square: "
+R_square
+
+RMSE <- sqrt(sum(rmse$sq_error)/length(rmse$sq_error)) # is this correct?
+"RMSE: "
+RMSE
+
+bias <- mean(rmse$modelled_mean) - mean(rmse$obs_value)
+"Bias: "
+bias
+
+sd_ratio <- sd(rmse$modelled_mean) / sd(rmse$obs_value)
+"SD ratio: "
+sd_ratio
+```
+
+# INTERPRET RESULTS - TO DO
+
+## Winter data
+
+```{r}
+# Load modelled data:
+CNRM <- "temp_CNRM_historical_winter_mean.nc"
+cnrm_nc <- nc_open(paste(path, "Outputs_201807/", CNRM, sep = ""))
+
+ICHEC <- "temp_ICHEC_historical_winter_mean.nc"
+ichec_nc <- nc_open(paste(path, "Outputs_201807/", ICHEC, sep = ""))
+
+IPSL <- "temp_IPSL_historical_winter_mean.nc"
+ipsl_nc <- nc_open(paste(path, "Outputs_201807/", IPSL, sep = ""))
+
+MOHC <- "temp_MOHC_historical_winter_mean.nc"
+mohc_nc <- nc_open(paste(path, "Outputs_201807/", MOHC, sep = ""))
+
+MPI <- "temp_MPI_historical_winter_mean.nc"
+mpi_nc <- nc_open(paste(path, "Outputs_201807/", MPI, sep = ""))
+
+# Generate models time series
+timeseries <- data.frame()
+
+for (i in 1:length(stations$cli_estacion_id)) {
+  # Collect "tas" time series for each model
+  tas_cnrm <- nc.get.var.subset.by.axes(cnrm_nc, "tas", axis.indices = list(X = stations$pixel_index_lon[i], Y = stations$pixel_index_lat[i]))
+  tas_ichec <- nc.get.var.subset.by.axes(ichec_nc, "tas", axis.indices = list(X = stations$pixel_index_lon[i], Y = stations$pixel_index_lat[i]))
+  tas_ipsl <- nc.get.var.subset.by.axes(ipsl_nc, "tas", axis.indices = list(X = stations$pixel_index_lon[i], Y = stations$pixel_index_lat[i]))
+  tas_mohc <- nc.get.var.subset.by.axes(mohc_nc, "tas", axis.indices = list(X = stations$pixel_index_lon[i], Y = stations$pixel_index_lat[i]))
+  tas_mpi <- nc.get.var.subset.by.axes(mpi_nc, "tas", axis.indices = list(X = stations$pixel_index_lon[i], Y = stations$pixel_index_lat[i]))
+  
+  # Collect "time" time series for each model - although all are monthly means, apparently the time point to which the data is linked is not the same for all models. However, they do refer to the same month and year, so only one time timeseries will be used
+  tas_cnrm_time <- nc.get.time.series(cnrm_nc, v = "tas",
+                               time.dim.name = "time")
+  # tas_ichec_time <- nc.get.time.series(ichec_nc, v = "tas",
+  #                              time.dim.name = "time")
+  # tas_ipsl_time <- nc.get.time.series(ipsl_nc, v = "tas",
+  #                              time.dim.name = "time")
+  # tas_mohc_time <- nc.get.time.series(mohc_nc, v = "tas",
+  #                              time.dim.name = "time")
+  # tas_mpi_time <- nc.get.time.series(mpi_nc, v = "tas",
+  #                              time.dim.name = "time")
+    
+  temp <- data_frame(time_cnrm = tas_cnrm_time,
+                     tas_cnrm = as.vector(tas_cnrm),
+                     # time_ichec = tas_ichec_time,
+                     tas_ichec = as.vector(tas_ichec),
+                     # time_ipsl = tas_ipsl_time,
+                     tas_ipsl = as.vector(tas_ipsl),
+                     # time_mohc = tas_mohc_time,
+                     tas_mohc = as.vector(tas_mohc),
+                     # time_mpi = tas_mpi_time,
+                     tas_mpi = as.vector(tas_mpi),
+                     cli_estacion_id = stations$cli_estacion_id[i],
+                     codigo = stations$codigo[i])
+  
+  timeseries <- rbind(timeseries, temp)
+}
+
+# Fetch time series
+timeseries <- timeseries %>%
+  mutate(time_cnrm = as.Date(format(time_cnrm, "%Y-%m-%d"))) %>%
+  mutate(winteryear = as.integer(format(time_cnrm,"%Y"))) %>%
+  select(codigo, cli_estacion_id, time_cnrm, winteryear, tas_cnrm, tas_ichec, tas_ipsl, tas_mohc, tas_mpi) %>%
+  mutate(codigo = as.character(codigo)) %>%
+  mutate(cli_estacion_id = as.factor(cli_estacion_id))
+
+# Add field observations to time series dataframe
+winter <- read.csv(paste(path, folder, "winter_mean.csv", sep = ""))
+
+winter <- winter %>%
+  mutate(obs_value = winter_mean) %>%
+  mutate(winteryear = year_grouping) %>%
+  select(cli_estacion_id, winteryear, obs_value) %>%
+  mutate(cli_estacion_id = as.factor(cli_estacion_id)) 
+
+winter_ts <- inner_join(winter, timeseries)
+
+# Add metrics
+winter_ts <- winter_ts %>%
+  mutate(modelled_mean = ((tas_cnrm + tas_ichec + tas_ipsl + tas_mohc + tas_mpi) / 5)) %>%
+  mutate(modelled_sd = (sqrt((((tas_cnrm - modelled_mean) ^ 2) + ((tas_ichec - modelled_mean) ^ 2) + ((tas_ipsl - modelled_mean) ^ 2) + ((tas_mohc - modelled_mean) ^ 2) + ((tas_mpi - modelled_mean) ^ 2)) / 4)))
+```
+
+Plotting - qualitative exploration
+
+Modelled vs observations: mean of models
+```{r}
+ggplot(winter_ts, aes(x = modelled_mean, y = obs_value, colour = codigo)) +
+  geom_point() + 
+  xlab("Predicted value") + ylab("Observed value") + 
+  theme(legend.position="none") +
+  ggtitle("Comparison of winter mean temperature predicted (mean across models) and observed values") +
+  geom_abline(slope = 1, intercept = 0)
+```
+
+Modelled vs observations: one model
+```{r}
+ggplot(winter_ts, aes(x = tas_ipsl, y = obs_value, colour = codigo)) +
+  geom_point() + 
+  xlab("Predicted value") + ylab("Observed value") + 
+  theme(legend.position="none") +
+  ggtitle("Comparison of winter mean temperature predicted by model IPSL and observed") +
+  geom_abline(slope = 1, intercept = 0)
+```
+
+Modelled vs observations: one-station time series
+```{r}
+selection <- winter_ts %>%
+  filter(codigo == "E190") %>%
+  select(time_cnrm, obs_value, modelled_mean) %>%
+  melt(id = c("time_cnrm"))
+
+ggplot(data = selection, aes(x = time_cnrm, y = value, colour = variable)) +
+  geom_line() + 
+  xlab("Year") + ylab("Winter mean temperature (ºC)") + 
+  theme() +
+  ggtitle("Time series for station E190: observed and modelled") +
+  scale_y_continuous(limits=c(0, 30))
+```
+
+Modelled vs observations: all-stations time series all models and mean
+```{r}
+reshaped_ts <- melt(winter_ts, id = c("codigo", "winteryear", "time_cnrm")) %>%
+  filter(variable != "modelled_sd") %>%
+  filter(variable != "cli_estacion_id") %>%
+  mutate(codigo = as.factor(codigo)) %>%
+  mutate(value = as.numeric(value))
+  
+ggplot(reshaped_ts, aes(x = time_cnrm, y = value, colour = codigo)) +
+  geom_point() +
+  xlab("Date") + ylab("Temperature (ºC)") +
+  theme_classic() 
+```
+
+Quantitative analysis
+
+Following "Chapter 16. Assessing Model Performance" (Ecological Forecasting, M. Dietze). 
+
+```{r}
+# Correlations between observations and predicted values: per model and against modelled mean
+a <- cor.test(winter_ts$obs_value, winter_ts$tas_cnrm)
+b <- cor.test(winter_ts$obs_value, winter_ts$tas_ichec)
+c <- cor.test(winter_ts$obs_value, winter_ts$tas_ipsl)
+d <- cor.test(winter_ts$obs_value, winter_ts$tas_mohc)
+e <- cor.test(winter_ts$obs_value, winter_ts$tas_mpi)
+f <- cor.test(winter_ts$obs_value, winter_ts$modelled_mean)         
+
+names <- c("CNRM", "ICHEC", "IPSL", "MOHC", "MPI", "Models mean")
+correlations <- c(a$estimate, b$estimate, c$estimate, d$estimate, e$estimate, f$estimate)
+ci_1 <- c(a$conf.int[1], b$conf.int[1], c$conf.int[1], d$conf.int[1], e$conf.int[1], f$conf.int[1])
+ci_2 <- c(a$conf.int[2], b$conf.int[2], c$conf.int[2], d$conf.int[2], e$conf.int[2], f$conf.int[2])
+
+cor_table <- data.frame(names, correlations, ci_1, ci_2)
+cor_table
+
+ggplot(data = cor_table) +
+  geom_errorbar(mapping=aes(x = names, ymin = ci_1, ymax = ci_2)) +
+  geom_point(mapping=aes(x = names, y = correlations)) +
+  xlab(NULL) +
+  ylab("Pearson's correlation coefficient") +
+  ggtitle("Correlations modelled vs field observations")
+  
+# Root Mean Square Error (RMSE), Root Square, Bias and SD ratio
+# *Calculated only for the mean of all five models, not for each model independently*
+  
+meanofobservationdata <- mean(winter_ts$obs_value)
+
+rmse <- winter_ts %>%
+  select(codigo, winteryear, obs_value, modelled_mean, modelled_sd) %>%
+  mutate(sq_error = (modelled_mean - obs_value) ^ 2) %>%
+  mutate(deviationfromdata = (obs_value - meanofobservationdata) ^ 2)
+
+R_square <- 1 - (sum(rmse$sq_error) / sum(rmse$deviationfromdata))
+
+"R_square: "
+R_square
+
+RMSE <- sqrt(sum(rmse$sq_error)/length(rmse$sq_error)) # is this correct?
+"RMSE: "
+RMSE
+
+bias <- mean(rmse$modelled_mean) - mean(rmse$obs_value)
+"Bias: "
+bias
+
+sd_ratio <- sd(rmse$modelled_mean) / sd(rmse$obs_value)
+"SD ratio: "
+sd_ratio
+```
+
+# INTERPRET RESULTS - TO DO

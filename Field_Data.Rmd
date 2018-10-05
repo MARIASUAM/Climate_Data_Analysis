@@ -8,6 +8,8 @@ output: html_document
 Load libraries:
 ```{r}
 library(dplyr)
+library(lubridate)
+library(ggplot2)
 ```
 
 Set working directory:
@@ -41,15 +43,15 @@ SELECT 	codigo,
 	WHERE long >= -3.754167 AND long <= -2.554167 AND lat >= 36.8125 AND lat <= 37.35417;
 ```
 
-The SQL result was exported as Selected_stations.csv file:
+The SQL result was exported as Inside_stations.csv file:
 
 ```{r}
-stations <- read.csv(paste(path, "Selected_stations.csv", sep = ""), sep = ";")
+in_stations <- read.csv(paste(path, "Inside_stations.csv", sep = ""), sep = ";")
 ```
 
-Stations to select are those with id 432, 431, 100, 99, 125, 218, 219, 246, 147, 146, 363, 61, 161, 58, 60, 238, 83, 59, 139, 414, 208, 206, 209, 207, 104, 105, 413, 157, 154, 213, 340, 324, 326, 368, 366, 102, 317, 365, 367, 369, 325, 220, 221, 196, 204, 200, 201, 199, 278, 202, 280, 276, 279, 195, 247, 197, 203, 342, 159, 160, 158, 69, 67, 256, 48, 45, 47, 198, 89, 91, 241, 257, 383, 155, 299, 122, 49, 46, 315, 272, 142, 90, 328, 329, 54, 132, 262, 309, 109, 118, 404, 405, 113, 334, 333, 332, 331, 314, 308, 307, 386, 304, 129, 311, 312, 166, 165, 164, 296, 53, 372, 254, 313, 88, 335, 252, 211, 212, 343, 416, 52, 50, 319, 56, 96, 255, 267, 408, 410, 417, 270, 106, 407, 336, 111, 110, 151, 177, 176, 41, 377, 133, 215, 216, 217, 180, 35, 33, 34, 32, 290, 162, 289, 44, 259, 260, 258, 300, 127, 128, 64, 63, 121, 188, 186, 57, 263, 66, 120, 306, 406, 338, 361, 134, 163, 337, 277, 112, 144, 388, 344, 345, 346, 347, 385, 17, 360, 19, 31, 22, 348, 349, 350, 351, 394, 373, 435, 4, 6, 7, 8, 9, 10, 11, 12, 352, 353, 354, 355, 23, 24, 26, 27, 28, 29, 261, 382, 409, 179, 239, 119, 310, 222, 205, 145, 123, 92, 124, 318, 150, 253, 249, 250, 251, 356, 357, 358 or 359
+Stations inside the area are those with id 432, 431, 100, 99, 125, 218, 219, 246, 147, 146, 363, 61, 161, 58, 60, 238, 83, 59, 139, 414, 208, 206, 209, 207, 104, 105, 413, 157, 154, 213, 340, 324, 326, 368, 366, 102, 317, 365, 367, 369, 325, 220, 221, 196, 204, 200, 201, 199, 278, 202, 280, 276, 279, 195, 247, 197, 203, 342, 159, 160, 158, 69, 67, 256, 48, 45, 47, 198, 89, 91, 241, 257, 383, 155, 299, 122, 49, 46, 315, 272, 142, 90, 328, 329, 54, 132, 262, 309, 109, 118, 404, 405, 113, 334, 333, 332, 331, 314, 308, 307, 386, 304, 129, 311, 312, 166, 165, 164, 296, 53, 372, 254, 313, 88, 335, 252, 211, 212, 343, 416, 52, 50, 319, 56, 96, 255, 267, 408, 410, 417, 270, 106, 407, 336, 111, 110, 151, 177, 176, 41, 377, 133, 215, 216, 217, 180, 35, 33, 34, 32, 290, 162, 289, 44, 259, 260, 258, 300, 127, 128, 64, 63, 121, 188, 186, 57, 263, 66, 120, 306, 406, 338, 361, 134, 163, 337, 277, 112, 144, 388, 344, 345, 346, 347, 385, 17, 360, 19, 31, 22, 348, 349, 350, 351, 394, 373, 435, 4, 6, 7, 8, 9, 10, 11, 12, 352, 353, 354, 355, 23, 24, 26, 27, 28, 29, 261, 382, 409, 179, 239, 119, 310, 222, 205, 145, 123, 92, 124, 318, 150, 253, 249, 250, 251, 356, 357, 358 or 359
 
-After selected stations are identified, data from these stations regarding temperature and precipitation should be downloaded. For this purpose, identification of variables id is required and is done based on "variables_linaria.xlsx". The conclusion is that:
+After inside stations are identified, data from these stations regarding temperature and precipitation should be downloaded. For this purpose, identification of variables id is required and is done based on "variables_linaria.xlsx". The conclusion is that:
 
 Climate variables related to air temperature are those with id 2, 3, 28, 30, 31, 32, 71, 72, 73, 126, 127 or 128.
 
@@ -59,7 +61,7 @@ These conclusion, specially regarding temperature, could be checked in case some
 
 # Temperature data
 
-In order to download temperature data from selected stations we should run the following query:
+In order to download all temperature data from all selected stations we should run the following query:
 
 ```{sql}
 SELECT id, cli_estacion_id, cli_variable_id, valor, fecha, created_at, updated_at, cli_validacione_id 
@@ -70,202 +72,797 @@ WHERE cli_estacion_id IN (432, 431, 100, 99, 125, 218, 219, 246, 147, 146, 363, 
 cli_variable_id IN (2, 3, 28, 30, 31, 32, 71, 72, 73, 126, 127 or 128)
 ```
 
-However, Linaria is not working properly and server falls continuously. Therefore, in order to narrow the query, stations where no variable is measured are discarded based on the following queries: 
+However, this big query should be split into small pieces in order to accelerate queries execution and decipher results.
+
+First, stations where no variables are measured can be discarded from the query. So:
 
 ```{sql}
--- Consulta 1: 
 WITH temporal AS (
   SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
-      WHERE cli_estacion_id IN (432, 431, 100, 99, 125, 218, 219, 246, 147, 146, 363, 61))
+      WHERE cli_estacion_id IN (432, 431, 100, 99, 125, 218, 219, 246, 147, 146, 363, 61, 161, 58, 60, 238, 83, 59, 139, 414, 208, 206, 209, 207, 104, 105, 413, 157, 154, 213, 340, 324, 326, 368, 366, 102, 317, 365, 367, 369, 325, 220, 221, 196, 204, 200, 201, 199, 278, 202, 280, 276, 279, 195, 247, 197, 203, 342, 159, 160, 158, 69, 67, 256, 48, 45, 47, 198, 89, 91, 241, 257, 383, 155, 299, 122, 49, 46, 315, 272, 142, 90, 328, 329, 54, 132, 262, 309, 109, 118, 404, 405, 113, 334, 333, 332, 331, 314, 308, 307, 386, 304, 129, 311, 312, 166, 165, 164, 296, 53, 372, 254, 313, 88, 335, 252, 211, 212, 343, 416, 52, 50, 319, 56, 96, 255, 267, 408, 410, 417, 270, 106, 407, 336, 111, 110, 151, 177, 176, 41, 377, 133, 215, 216, 217, 180, 35, 33, 34, 32, 290, 162, 289, 44, 259, 260, 258, 300, 127, 128, 64, 63, 121, 188, 186, 57, 263, 66, 120, 306, 406, 338, 361, 134, 163, 337, 277, 112, 144, 388, 344, 345, 346, 347, 385, 17, 360, 19, 31, 22, 348, 349, 350, 351, 394, 373, 435, 4, 6, 7, 8, 9, 10, 11, 12, 352, 353, 354, 355, 23, 24, 26, 27, 28, 29, 261, 382, 409, 179, 239, 119, 310, 222, 205, 145, 123, 92, 124, 318, 150, 253, 249, 250, 251, 356, 357, 358, 359))
   SELECT DISTINCT cli_estacion_id FROM temporal
+```
 
--- Consulta 2:
-WITH temporal AS (
-  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
-      WHERE cli_estacion_id IN (161, 58, 60, 238, 83, 59, 139, 414, 208, 206, 209, 207))
-  SELECT DISTINCT cli_estacion_id FROM temporal
+This results in the list of stations where at list one varible is measured (measuring_stations.csv):
 
--- Consulta 3:
-WITH temporal AS (
-  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
-      WHERE cli_estacion_id IN (104, 105, 413, 157, 154, 213, 340, 324, 326, 368, 366))
-  SELECT DISTINCT cli_estacion_id FROM temporal
+```{r}
+meas_stations <- read.csv(paste(path, "measuring_stations.csv", sep = ""), sep = ";")
+```
 
--- Consulta 4:
-WITH temporal AS (
-  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
-      WHERE cli_estacion_id IN (102, 317, 365, 367, 369, 325, 220, 221, 196, 204, 200))
-  SELECT DISTINCT cli_estacion_id FROM temporal
+Stations where at least one variable is measured are those with ID 195 129 106 337   8 247 280 311 318 314 312 179  54 342  47 209 276 208 110 211  99  48 368  28  83 262 204 304 125 151 162   4 253 407 119 200 270 122  56  53 329 277 222 123 261 310  92 180  23 127  44 332  58  26 213 290 404 405 206 111 196 218 309  22 360  91 238  45  27 199 409 155 417  60 165 105 382 335 124 205 197 340 220 367 259  11 386 166 249 252 132 112 254 201  61 176  96  67 388 241  17 325 221 147 160 121  50  33 258 161 157  19 154 109  57 239  31  35  52 317 366  69 334 385  34 219  32  12 188 296  10 324 164  90 146 139 289 133 150 408 308 100 416 331 250 158 113  63   9 260 24  64 145  88 118 272 128 300 207 104 413 217   6 102 315 212 383 328 246  29 159 343 267  41 216 186 263 177 202 144 and 7
 
--- Consulta 5:
-WITH temporal AS (
-  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
-      WHERE cli_estacion_id IN (201, 199, 278, 202, 280, 276, 279, 195, 247, 197, 203))
-  SELECT DISTINCT cli_estacion_id FROM temporal
+Now we can discard the stations where no temperature variable is measured:
 
--- Consulta 6:
+```{sql}
 WITH temporal AS (
   SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
-      WHERE cli_estacion_id IN (342, 159, 160, 158, 69, 67, 256, 48, 45, 47, 198, 89, 91))
+      WHERE cli_estacion_id IN (195, 129, 106, 337, 8, 247, 280, 311, 318, 314, 312, 179, 54, 342, 47, 209, 276, 208, 110, 211, 99, 48, 368, 28, 83, 262, 204, 304, 125, 151, 162, 4, 253, 407, 119, 200, 270, 122, 56, 53, 329, 277, 222, 123, 261, 310, 92, 180, 23, 127, 44, 332, 58, 26, 213, 290, 404, 405, 206, 111, 196, 218, 309, 22, 360, 91, 238, 45, 27, 199, 409, 155, 417, 60, 165, 105, 382, 335, 124, 205, 197, 340, 220, 367, 259, 11, 386, 166, 249, 252, 132, 112, 254, 201, 61, 176, 96, 67, 388, 241, 17, 325, 221, 147, 160, 121, 50, 33, 258, 161, 157, 19, 154, 109, 57, 239, 31, 35, 52, 317, 366, 69, 334, 385, 34, 219, 32, 12, 188, 296, 10, 324, 164, 90, 146, 139, 289, 133, 150, 408, 308, 100, 416, 331, 250, 158, 113, 63, 9, 260, 24, 64, 145, 88, 118, 272, 128, 300, 207, 104, 413, 217, 6, 102, 315, 212, 383, 328, 246, 29, 159, 343, 267, 41, 216, 186, 263, 177, 202, 144, 7)
+      AND cli_variable_id IN (2, 3, 28, 30, 31, 32, 71, 72, 73, 126, 127, 128))
   SELECT DISTINCT cli_estacion_id FROM temporal
+```
 
--- Consulta 7:
-WITH temporal AS (
-  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
-      WHERE cli_estacion_id IN (241, 257, 383, 155, 299, 122, 49, 46, 315, 272, 142, 90))
-  SELECT DISTINCT cli_estacion_id FROM temporal
+This results in the list of stations where at list one varible about temperature is measured (temp_stations.csv):
 
--- Consulta 8:
-WITH temporal AS (
-  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
-      WHERE cli_estacion_id IN (328, 329, 54, 132, 262, 309, 109, 118, 404, 405, 113, 334))
-  SELECT DISTINCT cli_estacion_id FROM temporal
+```{r}
+temp_stations <- read.csv(paste(path, "temp_stations.csv", sep = ""), sep = ";")
+```
 
--- Consulta 9:
-WITH temporal AS (
-  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
-      WHERE cli_estacion_id IN (333, 332, 331, 314, 308, 307, 386, 304, 129, 311, 312))
-  SELECT DISTINCT cli_estacion_id FROM temporal
+Stations where at least one variable is measured are those with ID 195, 337, 8, 311, 318, 179, 209, 208, 110, 48, 28, 83, 204, 304, 125, 253, 4, 119, 200, 277, 222, 261, 123, 310, 92, 23, 127, 26, 213, 111, 22, 360, 91, 27, 199, 409, 417, 60, 165, 105, 382, 335, 124, 205, 197, 340, 259, 11, 386, 249, 252, 112, 201, 388, 17, 221, 121, 50, 258, 19, 239, 31, 317, 385, 32, 188, 12, 10, 164, 150, 408, 63, 9, 260, 24, 88, 118, 145, 207, 6, 315, 328, 29, 267, 177, 202, 144, 7
 
--- Consulta 10:
-WITH temporal AS (
-  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
-      WHERE cli_estacion_id IN (166, 165, 164, 296, 53, 372, 254, 313, 88, 335, 252, 211))
-  SELECT DISTINCT cli_estacion_id FROM temporal
+Now we want to see if measuring stations where measuring any temperature data within 1970 and 2006.
 
--- Consulta 11:
+```{sql}
 WITH temporal AS (
-  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
-      WHERE cli_estacion_id IN (212, 343, 416, 52, 50, 319, 56, 96, 255, 267, 408, 410))
-  SELECT DISTINCT cli_estacion_id FROM temporal
+SELECT cli_estacion_id, cli_variable_id, fecha FROM cli_datos_estaciones
+    WHERE fecha BETWEEN '1970-01-01 00:00:00' AND '2006-01-01 00:00:00' 
+    AND cli_estacion_id IN (195, 129, 106, 337, 8, 247, 280, 311, 318, 314, 312, 179, 54, 342, 47, 209, 276, 208, 110, 211, 99, 48, 368, 28, 83, 262, 204, 304, 125, 151, 162, 4, 253, 407, 119, 200, 270, 122, 56, 53, 329, 277, 222, 123, 261, 310, 92, 180, 23, 127, 44, 332, 58, 26, 213, 290, 404, 405, 206, 111, 196, 218, 309, 22, 360, 91, 238, 45, 27, 199, 409, 155, 417, 60, 165, 105, 382, 335, 124, 205, 197, 340, 220, 367, 259, 11, 386, 166, 249, 252, 132, 112, 254, 201, 61, 176, 96, 67, 388, 241, 17, 325, 221, 147, 160, 121, 50, 33, 258, 161, 157, 19, 154, 109, 57, 239, 31, 35, 52, 317, 366, 69, 334, 385, 34, 219, 32, 12, 188, 296, 10, 324, 164, 90, 146, 139, 289, 133, 150, 408, 308, 100, 416, 331, 250, 158, 113, 63, 9, 260, 24, 64, 145, 88, 118, 272, 128, 300, 207, 104, 413, 217, 6, 102, 315, 212, 383, 328, 246, 29, 159, 343, 267, 41, 216, 186, 263, 177, 202, 144, 7)
+    AND cli_variable_id IN (2, 3, 28, 30, 31, 32, 71, 72, 73, 126, 127, 128))
 
--- Consulta 12:
-WITH temporal AS (
-  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
-      WHERE cli_estacion_id IN (417, 270, 106, 407, 336, 111, 110, 151, 177, 176, 41, 377))
-  SELECT DISTINCT cli_estacion_id FROM temporal
+SELECT DISTINCT cli_estacion_id FROM temporal
+```
 
--- Consulta 13:
-WITH temporal AS (
-  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
-      WHERE cli_estacion_id IN (133, 215, 216, 217, 180, 35, 33, 34, 32, 290, 162, 289))
-  SELECT DISTINCT cli_estacion_id FROM temporal
+This results in the list of stations where at least one varible about temperature was measured during the historical period (hist_stations.csv):
 
--- Consulta 14:
-WITH temporal AS (
-  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
-      WHERE cli_estacion_id IN (44, 259, 260, 258, 300, 127, 128, 64, 63, 121, 188, 186))
-  SELECT DISTINCT cli_estacion_id FROM temporal
+```{r}
+hist_stations <- read.csv(paste(path, "hist_stations.csv", sep = ""), sep = ";")
+```
 
--- Consulta 15:
-WITH temporal AS (
-  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
-      WHERE cli_estacion_id IN (57, 263, 66, 120, 306, 406, 338, 361, 134, 163, 337, 277))
-  SELECT DISTINCT cli_estacion_id FROM temporal
+Stations where at least one temperature variable was measured during the historical period are those with ID 195, 337, 311, 318, 179, 209, 110, 208, 48, 28, 83, 304, 204, 125, 119, 200, 222, 261, 123, 310, 92, 23, 127, 213, 111, 22, 360, 91, 199, 409, 417, 165, 105, 382, 335, 205, 124, 197, 340, 259, 386, 252, 112, 201, 388, 17, 121, 50, 258, 19, 239, 31, 317, 385, 32, 188, 164, 408, 63, 260, 24, 88, 145, 118, 207, 315, 328, 29, 267, 177, 202, 144
 
--- Consulta 16:
-WITH temporal AS (
-  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
-      WHERE cli_estacion_id IN (112, 144, 388, 344, 345, 346, 347, 385, 17, 360, 19, 31))
-  SELECT DISTINCT cli_estacion_id FROM temporal
+Now we can select variables to see what is available. Since all variables at once would be a lot of data, let's check similar variables together and separated from the others.
 
--- Consulta 17:
-WITH temporal AS (
-  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
-      WHERE cli_estacion_id IN (22, 348, 349, 350, 351, 394, 373, 435, 4, 6, 7, 8, 9, 10))
-  SELECT DISTINCT cli_estacion_id FROM temporal
+tmax:
+```{sql}
+SELECT cli_estacion_id, cli_variable_id, valor, fecha, created_at, updated_at, cli_validacione_id FROM cli_datos_estaciones
+    WHERE fecha BETWEEN '1970-01-01 00:00:00' AND '2006-01-01 00:00:00' 
+    AND cli_estacion_id IN (195, 337, 311, 318, 179, 209, 110, 208, 48, 28, 83, 304, 204, 125, 119, 200, 222, 261, 123, 310, 92, 23, 127, 213, 111, 22, 360, 91, 199, 409, 417, 165, 105, 382, 335, 205, 124, 197, 340, 259, 386, 252, 112, 201, 388, 17, 121, 50, 258, 19, 239, 31, 317, 385, 32, 188, 164, 408, 63, 260, 24, 88, 145, 118, 207, 315, 328, 29, 267, 177, 202, 144)
+    AND cli_variable_id IN (2, 31, 72, 128)
+```
 
--- Consulta 18:
-WITH temporal AS (
-  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
-      WHERE cli_estacion_id IN (11, 12, 352, 353, 354, 355, 23, 24, 26, 27, 28, 29, 261))
-  SELECT DISTINCT cli_estacion_id FROM temporal
+```{r}
+tmax_data <- read.csv(paste(path, "tmax_data.csv", sep = ""), sep = ";")
 
--- Consulta 19:
-WITH temporal AS (
-  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
-      WHERE cli_estacion_id IN (382, 409, 179, 239, 119, 310, 222, 205, 145, 123, 92, 124))
-  SELECT DISTINCT cli_estacion_id FROM temporal
+tmax <- tmax_data %>%
+  select(cli_estacion_id, cli_variable_id, valor, fecha, cli_validacione_id) %>%
+  mutate(cli_estacion_id = as.factor(cli_estacion_id)) %>%
+  mutate(cli_validacione_id = as.factor(cli_validacione_id)) %>%
+  mutate(cli_variable_id = as.factor(cli_variable_id)) %>%
+  mutate(fecha = ymd_hms(fecha))
+```
+
+**Actually, tmax is only measured in our stations of interest and for the historical period through variable 128.**
+
+tmin:
+```{sql}
+SELECT cli_estacion_id, cli_variable_id, valor, fecha, created_at, updated_at, cli_validacione_id FROM cli_datos_estaciones
+    WHERE fecha BETWEEN '1970-01-01 00:00:00' AND '2006-01-01 00:00:00' 
+    AND cli_estacion_id IN (195, 337, 311, 318, 179, 209, 110, 208, 48, 28, 83, 304, 204, 125, 119, 200, 222, 261, 123, 310, 92, 23, 127, 213, 111, 22, 360, 91, 199, 409, 417, 165, 105, 382, 335, 205, 124, 197, 340, 259, 386, 252, 112, 201, 388, 17, 121, 50, 258, 19, 239, 31, 317, 385, 32, 188, 164, 408, 63, 260, 24, 88, 145, 118, 207, 315, 328, 29, 267, 177, 202, 144)
+    AND cli_variable_id IN (3, 32, 73, 127)
+```
+
+```{r}
+tmin_data <- read.csv(paste(path, "tmin_data.csv", sep = ""), sep = ";")
+
+tmin <- tmin_data %>%
+  select(cli_estacion_id, cli_variable_id, valor, fecha, cli_validacione_id) %>%
+  mutate(cli_estacion_id = as.factor(cli_estacion_id)) %>%
+  mutate(cli_validacione_id = as.factor(cli_validacione_id)) %>%
+  mutate(cli_variable_id = as.factor(cli_variable_id)) %>%
+  mutate(fecha = ymd_hms(fecha))
+```
+
+**Actually, tmin is only measured in our stations of interest and for the historical period through variable 127.**
+
+tmean
+```{sql}
+SELECT cli_estacion_id, cli_variable_id, valor, fecha, created_at, updated_at, cli_validacione_id FROM cli_datos_estaciones
+    WHERE fecha BETWEEN '1970-01-01 00:00:00' AND '2006-01-01 00:00:00' 
+    AND cli_estacion_id IN (195, 337, 311, 318, 179, 209, 110, 208, 48, 28, 83, 304, 204, 125, 119, 200, 222, 261, 123, 310, 92, 23, 127, 213, 111, 22, 360, 91, 199, 409, 417, 165, 105, 382, 335, 205, 124, 197, 340, 259, 386, 252, 112, 201, 388, 17, 121, 50, 258, 19, 239, 31, 317, 385, 32, 188, 164, 408, 63, 260, 24, 88, 145, 118, 207, 315, 328, 29, 267, 177, 202, 144)
+    AND cli_variable_id IN (28, 30, 71, 126)
+```
+
+```{r}
+tmean_data <- read.csv(paste(path, "tmean_data.csv", sep = ""), sep = ";")
+
+tmean <- tmean_data %>%
+  select(cli_estacion_id, cli_variable_id, valor, fecha, cli_validacione_id) %>%
+  mutate(cli_estacion_id = as.factor(cli_estacion_id)) %>%
+  mutate(cli_validacione_id = as.factor(cli_validacione_id)) %>%
+  mutate(cli_variable_id = as.factor(cli_variable_id)) %>%
+  mutate(fecha = ymd_hms(fecha)) %>%
+  mutate(hora = hour(fecha)) %>%
+  mutate(valor = as.numeric(as.character(valor)))
+
+summary(tmean)
+```
+
+**Actually, tmean is only measured in our stations of interest and for the historical period through variable 30.**
+
+Considering cli_validaciones:
+    1 = Datos aún sin validar
+    2 = No transferible al sistema
+    *3 = Válido por rango*
+    *4 = No supera validación por rango*
+    *5 = Válido por validación específica de la variable*
+    *6 = No supera validación específica*
+    7 = Dato corregido
+    *8 = Dato obtenido por Método de Interpolación*
+    9 = Síntoma de error
+
+Let's see our data
+```{r}
+factor(tmax_data$cli_validacione_id)  # Levels: 3   5   8
+factor(tmin_data$cli_validacione_id)  # Levels: 3   5   8
+factor(tmean_data$cli_validacione_id) # Levels: 3 4 5 6 8
+```
+
+Discard validacione_id = 4 or 6
+```{r}
+tmean <- tmean %>%
+  filter(cli_validacione_id != 4) %>%
+  filter(cli_validacione_id != 6)
+```
+
+tmean data have values out of range (tmean = 9999.0). We need to check where these come from and discard them or discard the mistaken stations.
+
+Let's check each station in detail
+
+```{r}
+levels(tmean$cli_estacion_id) # "17"  "19"  "22"  "23"  "24"  "28"  "29"  "31"  "32"  "92"  "112" "119" "123" "124" "144" "145" "179" "195" "197" "202" "204" "205" "222" "239" "261" "310" "318" "337" "360" "382" "385" "388" "409"
+```
+
+```{r}
+estaciones <- as.vector(levels(tmean$cli_estacion_id))
+estaciones
+```
+
+```{r}
+st_data <- tmean %>%
+  filter(cli_estacion_id == 17) %>%
+  select(fecha, valor)
+ 
+ggplot(st_data, aes(x = fecha, y = valor)) +
+  geom_point() +
+  ggtitle("Estacion 17")
+```
+
+```{r}
+st_data <- tmean %>%
+  filter(cli_estacion_id == 19) %>%
+  select(fecha, valor)
+
+ggplot(st_data, aes(x = fecha, y = valor)) +
+  geom_point() +
+  ggtitle("Estacion 19")
+```
+
+```{r}
+st_data <- tmean %>%
+  filter(cli_estacion_id == 22) %>%
+  select(fecha, valor)
+
+ggplot(st_data, aes(x = fecha, y = valor)) +
+  geom_point() +
+  ggtitle("Estacion 22")
+```
+
+```{r}
+st_data <- tmean %>%
+  filter(cli_estacion_id == 23) %>%
+  select(fecha, valor)
+
+ggplot(st_data, aes(x = fecha, y = valor)) +
+  geom_point() +
+  ggtitle("Estacion 23")
+```
+
+```{r}
+st_data <- tmean %>%
+  filter(cli_estacion_id == 24) %>%
+  select(fecha, valor)
+
+ggplot(st_data, aes(x = fecha, y = valor)) +
+  geom_point() +
+  ggtitle("Estacion 24")
+```
+
+```{r}
+st_data <- tmean %>%
+  filter(cli_estacion_id == 28) %>%
+  select(fecha, valor)
+
+ggplot(st_data, aes(x = fecha, y = valor)) +
+  geom_point() +
+  ggtitle("Estacion 28")
+```
+
+```{r}
+st_data <- tmean %>%
+  filter(cli_estacion_id == 29) %>%
+  select(fecha, valor)
+
+ggplot(st_data, aes(x = fecha, y = valor)) +
+  geom_point() +
+  ggtitle("Estacion 29")
+```
+
+```{r}
+st_data <- tmean %>%
+  filter(cli_estacion_id == 31) %>%
+  select(fecha, valor)
+
+ggplot(st_data, aes(x = fecha, y = valor)) +
+  geom_point() +
+  ggtitle("Estacion 31")
+```
+
+```{r}
+st_data <- tmean %>%
+  filter(cli_estacion_id == 32) %>%
+  select(fecha, valor)
+
+ggplot(st_data, aes(x = fecha, y = valor)) +
+  geom_point() +
+  ggtitle("Estacion 32")
+```
+
+```{r}
+st_data <- tmean %>%
+  filter(cli_estacion_id == 92) %>%
+  select(fecha, valor)
+
+ggplot(st_data, aes(x = fecha, y = valor)) +
+  geom_point() +
+  ggtitle("Estacion 92")
+```
+
+```{r}
+st_data <- tmean %>%
+  filter(cli_estacion_id == 112) %>%
+  select(fecha, valor)
+
+ggplot(st_data, aes(x = fecha, y = valor)) +
+  geom_point() +
+  ggtitle("Estacion 112")
+```
+
+```{r}
+st_data <- tmean %>%
+  filter(cli_estacion_id == 119) %>%
+  select(fecha, valor)
+
+ggplot(st_data, aes(x = fecha, y = valor)) +
+  geom_point() +
+  ggtitle("Estacion 119")
+```
+
+```{r}
+st_data <- tmean %>%
+  filter(cli_estacion_id == 123) %>%
+  select(fecha, valor)
+
+ggplot(st_data, aes(x = fecha, y = valor)) +
+  geom_point() +
+  ggtitle("Estacion 123")
+```
+
+```{r}
+st_data <- tmean %>%
+  filter(cli_estacion_id == 124) %>%
+  select(fecha, valor)
+
+ggplot(st_data, aes(x = fecha, y = valor)) +
+  geom_point() +
+  ggtitle("Estacion 124")
+```
+
+```{r}
+st_data <- tmean %>%
+  filter(cli_estacion_id == 144) %>%
+  select(fecha, valor)
+
+ggplot(st_data, aes(x = fecha, y = valor)) +
+  geom_point() +
+  ggtitle("Estacion 144")
+```
+
+```{r}
+st_data <- tmean %>%
+  filter(cli_estacion_id == 145) %>%
+  select(fecha, valor)
+
+ggplot(st_data, aes(x = fecha, y = valor)) +
+  geom_point() +
+  ggtitle("Estacion 145")
+```
+
+```{r}
+st_data <- tmean %>%
+  filter(cli_estacion_id == 179) %>%
+  select(fecha, valor)
+
+ggplot(st_data, aes(x = fecha, y = valor)) +
+  geom_point() +
+  ggtitle("Estacion 179")
+```
+
+```{r}
+st_data <- tmean %>%
+  filter(cli_estacion_id == 195) %>%
+  select(fecha, valor)
+
+ggplot(st_data, aes(x = fecha, y = valor)) +
+  geom_point() +
+  ggtitle("Estacion 195")
+```
+
+```{r}
+st_data <- tmean %>%
+  filter(cli_estacion_id == 197) %>%
+  select(fecha, valor)
+
+ggplot(st_data, aes(x = fecha, y = valor)) +
+  geom_point() +
+  ggtitle("Estacion 197")
+```
+
+```{r}
+st_data <- tmean %>%
+  filter(cli_estacion_id == 202) %>%
+  select(fecha, valor)
+
+ggplot(st_data, aes(x = fecha, y = valor)) +
+  geom_point() +
+  ggtitle("Estacion 202")
+```
+
+```{r}
+st_data <- tmean %>%
+  filter(cli_estacion_id == 204) %>%
+  select(fecha, valor)
+
+ggplot(st_data, aes(x = fecha, y = valor)) +
+  geom_point() +
+  ggtitle("Estacion 204")
+```
+
+```{r}
+st_data <- tmean %>%
+  filter(cli_estacion_id == 205) %>%
+  select(fecha, valor)
+
+ggplot(st_data, aes(x = fecha, y = valor)) +
+  geom_point() +
+  ggtitle("Estacion 205")
+```
+
+```{r}
+st_data <- tmean %>%
+  filter(cli_estacion_id == 222) %>%
+  select(fecha, valor)
+
+ggplot(st_data, aes(x = fecha, y = valor)) +
+  geom_point() +
+  ggtitle("Estacion 222")
+```
+
+```{r}
+st_data <- tmean %>%
+  filter(cli_estacion_id == 239) %>%
+  select(fecha, valor)
+
+ggplot(st_data, aes(x = fecha, y = valor)) +
+  geom_point() +
+  ggtitle("Estacion 239")
+```
+
+```{r}
+st_data <- tmean %>%
+  filter(cli_estacion_id == 261) %>%
+  select(fecha, valor)
+
+ggplot(st_data, aes(x = fecha, y = valor)) +
+  geom_point() +
+  ggtitle("Estacion 261")
+```
+
+```{r}
+st_data <- tmean %>%
+  filter(cli_estacion_id == 310) %>%
+  select(fecha, valor)
+
+ggplot(st_data, aes(x = fecha, y = valor)) +
+  geom_point() +
+  ggtitle("Estacion 310")
+```
+
+```{r}
+st_data <- tmean %>%
+  filter(cli_estacion_id == 318) %>%
+  select(fecha, valor)
+
+ggplot(st_data, aes(x = fecha, y = valor)) +
+  geom_point() +
+  ggtitle("Estacion 318")
+```
+
+```{r}
+st_data <- tmean %>%
+  filter(cli_estacion_id == 337) %>%
+  select(fecha, valor)
+
+ggplot(st_data, aes(x = fecha, y = valor)) +
+  geom_point() +
+  ggtitle("Estacion 337")
+```
+
+```{r}
+st_data <- tmean %>%
+  filter(cli_estacion_id == 360) %>%
+  select(fecha, valor)
+
+ggplot(st_data, aes(x = fecha, y = valor)) +
+  geom_point() +
+  ggtitle("Estacion 360")
+```
+
+```{r}
+st_data <- tmean %>%
+  filter(cli_estacion_id == 382) %>%
+  select(fecha, valor)
+
+ggplot(st_data, aes(x = fecha, y = valor)) +
+  geom_point() +
+  ggtitle("Estacion 382")
+```
+
+```{r}
+st_data <- tmean %>%
+  filter(cli_estacion_id == 385) %>%
+  select(fecha, valor)
+
+ggplot(st_data, aes(x = fecha, y = valor)) +
+  geom_point() +
+  ggtitle("Estacion 385")
+```
+
+```{r}
+st_data <- tmean %>%
+  filter(cli_estacion_id == 388) %>%
+  select(fecha, valor)
+
+ggplot(st_data, aes(x = fecha, y = valor)) +
+  geom_point() +
+  ggtitle("Estacion 388")
+```
+
+```{r}
+st_data <- tmean %>%
+  filter(cli_estacion_id == 409) %>%
+  select(fecha, valor)
+
+ggplot(st_data, aes(x = fecha, y = valor)) +
+  geom_point() +
+  ggtitle("Estacion 409")
+```
+
+From these plots, we see the following:
+
+  - Station  17 - some outlier, but alright
+  - Station  19 - some outliers, but alright
+  - Station  22 - some gap, outliers and periods alright
+  - Station  23 - discard, nonsense
+  - Station  24 - discard, nonsense
+  - Station  28 - discard, nonsense
+  - Station  29 - discard, nonsense
+  - Station  31 - big gap, periods alright
+  - Station  32 - alright
+  - Station  92 - gap, some outliers, but alright
+  - Station 112 - gap, but alright
+  - Station 119 - alright
+  - Station 123 - gaps, some outlier, but alright
+  - Station 124 - very short period of time (less than 4 months)
+  - Station 144 - gaps, but alright
+  - Station 145 - some outliers but alright
+  - Station 179 - alright
+  - Station 195 - alright
+  - Station 197 - alright
+  - Station 202 - alright
+  - Station 204 - alright
+  - Station 205 - weird peak, but alright
+  - Station 222 - very short period of time (less than 4 months)
+  - Station 239 - alright, but gaps
+  - Station 261 - discard, nonsense
+  - Station 310 - alright, but gaps
+  - Station 318 - very short period of time (less than a year) + gaps + weird trend
+  - Station 337 - alright, but gaps
+  - Station 360 - a couple of outliers, and two peaks, but alright
+  - Station 382 - discard, nonsense 
+  - Station 385 - very short period of time (less than a year)
+  - Station 388 - gaps, some outlier and 0 values very constant in some periods
+  - Station 409 - discard, nonsense
+
+So we discard the nonsense stations, and cut off the outliers. Variable 30 has a range -25 to 45, so values out of range are discarded.
+```{r}
+target <- c("17", "19", "22", "31", "32", "92", "112", "119", "123", "124", "144", "145", "179", "195", "197", "202", "204", "205", "222", "239", "310", "318", "337", "360", "385", "388")
+
+tmean_filt <- tmean %>%
+  filter(cli_estacion_id %in% target) %>%
+  filter(valor <= 45) %>%
+  filter(valor >= -25)
+
+# write.csv(tmean_filt, paste(path, "/tmean_polished.csv", sep = ""))
+```
+
+Other checks
+
+No more than one "valor" for the same station, variable, date and hour.
+
+```{r}
+aver <- tmax %>%
+  mutate(hora = hour(fecha)) %>%
+  group_by(cli_estacion_id, cli_variable_id, fecha, hora) %>%
+  summarise(n = n())
+
+aver <- tmin %>%
+  mutate(hora = hour(fecha)) %>%
+  group_by(cli_estacion_id, cli_variable_id, fecha, hora) %>%
+  summarise(n = n())
+
+aver <- tmean_filt %>%
+  mutate(hora = hour(fecha)) %>%
+  group_by(cli_estacion_id, cli_variable_id, fecha, hora) %>%
+  summarise(n = n())
+```
+
+No more than one "valor" for the same station, variable, date, hour AND validaciones.
+
+```{r}
+aver <- tmax %>%
+  mutate(hora = hour(fecha)) %>%
+  group_by(cli_estacion_id, cli_variable_id, fecha, hora, cli_validacione_id) %>%
+  summarise(n = n()) %>%
+  filter(n != 1)
+
+aver <- tmin %>%
+  mutate(hora = hour(fecha)) %>%
+  group_by(cli_estacion_id, cli_variable_id, fecha, hora, cli_validacione_id) %>%
+  summarise(n = n()) %>%
+  filter(n != 1)
+
+aver <- tmean_filt %>%
+  mutate(hora = hour(fecha)) %>%
+  group_by(cli_estacion_id, cli_variable_id, fecha, hora, cli_validacione_id) %>%
+  summarise(n = n()) %>%
+  filter(n != 1)
+```
+
+Now, since we want to compare the field data with the modelled data and we have modelled data as yearmean, (season)_mean, monmean, daymin and daymax, we want to produce these variables with the field data. 
+
+Although we have tmin and tmax, for now we will use tmean to calculate all variables. 
+
+# Variable calculations for comparison with modelled data
+
+Considering we start executing from here:
+
+```{r}
+tmean_filt <- read.csv(paste(path, "tmean_polished.csv", sep = ""), sep = ",")
+
+tmean <- tmean_filt %>%
+  select(cli_estacion_id, cli_variable_id, valor, fecha, cli_validacione_id) %>%
+  mutate(cli_estacion_id = as.factor(cli_estacion_id)) %>%
+  mutate(cli_validacione_id = as.factor(cli_validacione_id)) %>%
+  mutate(cli_variable_id = as.factor(cli_variable_id)) %>%
+  mutate(fecha = ymd_hms(fecha)) %>%
+  mutate(valor = as.numeric(as.character(valor)))
+
+levels(tmean$cli_estacion_id)
+levels(tmean$cli_validacione_id)
+levels(tmean$cli_variable_id)
+
+tmean <- tmean %>%
+  select(cli_estacion_id, fecha, valor, cli_validacione_id) %>%
+  mutate(year = year(fecha)) %>%
+  mutate(month = month(fecha)) %>%
+  mutate(day = day(fecha)) %>%
+  mutate(hour = hour(fecha)) %>%
+  mutate(minute = minute(fecha))
+```
+
+Grouping of values to calculate daymin, daymax, monthmean, yearmean, seasonmean
+
+```{r}
+hour_grouped <- tmean %>%
+  select(cli_estacion_id, year, month, day, hour, valor) %>%
+  group_by(cli_estacion_id, year, month, day, hour) %>%
+  summarise(hour_mean = mean(valor))
+```
+
+# Calculate day_min and day_max 
+
+```{r}
+calc_dmin <- hour_grouped %>%
+  select(cli_estacion_id, year, month, day, hour_mean) %>%
+  group_by(cli_estacion_id, year, month, day) %>%
+  summarise(dmin = min(hour_mean))
+# write.csv(calc_dmin, paste(path, "/calc_dmin.csv", sep = ""))
+```
+
+Plot
+```{r}
+calc_dmin_date <- calc_dmin %>%
+  mutate(date = paste(year, month, day, sep = "-")) %>%
+  mutate(date = ymd(date))
+
+ggplot(calc_dmin_date, aes(x = date, y = dmin, colour = cli_estacion_id)) +
+  geom_point()
+```
+
+```{r}
+calc_dmax <- hour_grouped %>%
+  select(cli_estacion_id, year, month, day, hour_mean) %>%
+  group_by(cli_estacion_id, year, month, day) %>%
+  summarise(dmax = max(hour_mean))
+# write.csv(calc_dmax, paste(path, "/calc_dmax.csv", sep = ""))
+```
+
+Plot
+```{r}
+calc_dmax_date <- calc_dmax %>%
+  mutate(date = paste(year, month, day, sep = "-")) %>%
+  mutate(date = ymd(date))
+
+ggplot(calc_dmax_date, aes(x = date, y = dmax, colour = cli_estacion_id)) +
+  geom_point()
+```
+
+```{r}
+calc_dmean <- hour_grouped %>%
+  select(cli_estacion_id, year, month, day, hour_mean) %>%
+  group_by(cli_estacion_id, year, month, day) %>%
+  summarise(dmean = mean(hour_mean))
+# write.csv(calc_dmean, paste(path, "/calc_dmean.csv", sep = ""))
+```
+
+Plot
+```{r}
+calc_dmean_date <- calc_dmean %>%
+  mutate(date = paste(year, month, day, sep = "-")) %>%
+  mutate(date = ymd(date))
+
+ggplot(calc_dmean_date, aes(x = date, y = dmean, colour = cli_estacion_id)) +
+  geom_point()
+```
+
+# Calculate monmean
+
+```{r}
+calc_mmean <- calc_dmean %>%
+  select(cli_estacion_id, year, month, dmean) %>%
+  group_by(cli_estacion_id, year, month) %>%
+  summarise(mmean = mean(dmean))
+# write.csv(calc_mmean, paste(path, "/calc_mmean.csv", sep = ""))
+```
+
+Plot
+```{r}
+calc_mmean_date <- calc_mmean %>%
+  mutate(date = paste(year, month, "01", sep = "-")) %>%
+  mutate(date = ymd(date))
+
+ggplot(calc_mmean_date, aes(x = date, y = mmean, colour = cli_estacion_id)) +
+  geom_point()
+```
+
+# Calculate yearmean
+
+```{r}
+calc_ymean <- calc_mmean %>%
+  select(cli_estacion_id, year, mmean) %>%
+  group_by(cli_estacion_id, year) %>%
+  summarise(ymean = mean(mmean))
+# write.csv(calc_ymean, paste(path, "/calc_ymean.csv", sep = ""))
+```
+
+plot
+```{r}
+ggplot(calc_ymean, aes(x = year, y = ymean, colour = cli_estacion_id)) +
+  geom_point()
+```
+
+# Calculate (season)_mean
+
+```{r}
+spring <- calc_mmean %>%
+  select(cli_estacion_id, year, month, mmean) %>%
+  filter(month == 3 | month == 4 | month == 5) %>%
+  group_by(cli_estacion_id, year) %>%
+  summarise(spring_mean = mean(mmean))
+
+# write.csv(spring, paste(path, "/spring_mean.csv", sep = ""))
+```
+
+plot
+```{r}
+ggplot(spring, aes(x = year, y = spring_mean, colour = cli_estacion_id)) +
+  geom_point()
+```
+
+```{r}
+summer <- calc_mmean %>%
+  select(cli_estacion_id, year, month, mmean) %>%
+  filter(month == 6 | month == 7 | month == 8) %>%
+  group_by(cli_estacion_id, year) %>%
+  summarise(summer_mean = mean(mmean))
+
+# write.csv(summer, paste(path, "/summer_mean.csv", sep = ""))
+```
+
+plot
+```{r}
+ggplot(summer, aes(x = year, y = summer_mean, colour = cli_estacion_id)) +
+  geom_point()
+```
+
+```{r}
+fall <- calc_mmean %>%
+  select(cli_estacion_id, year, month, mmean) %>%
+  filter(month == 9 | month == 10 | month == 11) %>%
+  group_by(cli_estacion_id, year) %>%
+  summarise(fall_mean = mean(mmean))
+
+# write.csv(fall, paste(path, "/fall_mean.csv", sep = ""))
+```
+
+plot
+```{r}
+ggplot(fall, aes(x = year, y = fall_mean, colour = cli_estacion_id)) +
+  geom_point()
+```
+
+```{r}
+dec_data <- calc_mmean %>%
+  select(cli_estacion_id, year, month, mmean) %>%
+  filter(month == 12) %>%
+  mutate(year_grouping = year + 1)
+
+jan_feb_data <- calc_mmean %>%
+  select(cli_estacion_id, year, month, mmean) %>%
+  filter(month == 1 | month == 2) %>%
+  mutate(year_grouping = year)
   
--- Consulta 20:
-WITH temporal AS (
-  SELECT DISTINCT cli_estacion_id, cli_variable_id FROM cli_datos_estaciones
-      WHERE cli_estacion_id IN (318, 150, 253, 249, 250, 251, 356, 357, 358, 359))
-  SELECT DISTINCT cli_estacion_id FROM temporal
+winter_data <- rbind(dec_data, jan_feb_data)
+
+winter <- winter_data %>%
+  select(cli_estacion_id, year_grouping, mmean) %>%
+  group_by(cli_estacion_id, year_grouping) %>%
+  summarise(winter_mean = mean(mmean))
+
+# write.csv(winter, paste(path, "/winter_mean.csv", sep = ""))
 ```
 
-The output of each query is exported as .csv file and then each of these is merged together: 
-
+plot
 ```{r}
-filtered_stations <- data.frame()
-
-for (i in 1:20) {
-  consulta <- read.csv(paste(path, "Consulta_", i, ".csv", sep = ""))
-  filtered_stations <- rbind(filtered_stations, consulta)
-}
-
-filtered_stations$cli_estacion_id
-
-colnames(filtered_stations) <- c("id")
-
-filtered_stations <- filtered_stations %>%
-  left_join(stations)
-
-colnames(filtered_stations) <- c("cli_estacion_id", "codigo", "nombre", "long", "lat")
-
-# write.csv(filtered_stations, paste(path, "Field_Observations/filtered_stations.csv", sep = ""))
+ggplot(winter, aes(x = year_grouping, y = winter_mean, colour = cli_estacion_id)) +
+  geom_point()
 ```
-
-As a result, 56 stations have been discarded since no variable was measured in them, and now "filtered_stations" are 182 stations. Now we would like to download the data from temperature variables coming from this stations and only referring to the historical period (1970-2006), as this is the period to compare with modelled data. The query we want to run is something like this:
-
-```{sql}
-WITH temporal AS (
-SELECT id, cli_estacion_id, cli_variable_id, valor, fecha, created_at, updated_at, cli_validacione_id FROM cli_datos_estaciones
-    WHERE fecha BETWEEN '1970-01-01 00:00:00' AND '2006-01-01 00:00:00' )
-
-SELECT id, cli_estacion_id, cli_variable_id, valor, fecha, created_at, updated_at, cli_validacione_id FROM temporal
-    WHERE cli_estacion_id IN (61, 99, 125, 147, 219, 146, 100, 218, 246, 209, 208, 83, 161, 58, 139, 206, 238, 207, 60, 340, 368, 157, 154, 366, 213, 324, 104, 413, 105, 220, 367, 325, 204, 221, 200, 317, 196, 102, 195, 247, 280, 276, 199, 197, 201, 202, 342, 47, 67, 48, 160, 69, 158, 91, 45, 159, 241, 122, 90, 272, 155, 315, 383, 54, 132, 262, 329, 109, 334, 404, 405, 309, 113, 118, 328, 129, 311, 386, 314, 312, 304, 332, 308, 331, 166, 252, 254, 211, 53, 296, 164, 88, 165, 335, 166, 252, 254, 211, 53, 296, 164, 88, 165, 335, 106, 176, 110, 151, 407, 270, 111, 417, 41, 177, 162, 33, 180, 35, 34, 32, 290, 289, 133, 217, 216, 259, 121, 258, 127, 44, 188, 63, 260, 64, 128, 300, 186, 337, 277, 57, 263, 360, 112, 388, 17, 19, 31, 385, 144, 8, 4, 22, 10, 9, 6, 7, 28, 261, 23, 26, 27, 11, 12, 24, 29, 179, 119, 222, 123, 310, 92, 409, 382, 124, 205, 239, 145, 318, 253, 249, 150, 250) 
-    AND cli_variable_id IN (2, 3, 28, 30, 31, 32, 71, 72, 73, 126, 127, 128)
-```
-
-Nevertheless, Linaria keeps having problems and downloading is not possible at the moment.
-
-# Trials with test data
-
-Data from Andrea, sent to LTER. Two datasets:
-
-## Monthly field observations (mfo)
-
-Assuming they refer to monthly mean temperature
-
-```{r}
-mfo <- read.csv("C:/Users/DELL/Downloads/Meterorological_Data/Ejemplo_Resolucion_Mensual/30_temp.csv", sep = ";") # Load data
-
-colnames(mfo) <- c("codigo", "year", "month", "value") # Rename columns
-
-clean_mfo <- inner_join(mfo, filtered_stations, by = "codigo") %>% # select data only from filtered stations
-  select(codigo, year, month, value) %>%
-  filter(year >= 1970) %>% # select data within historical period
-  filter(year <= 2006) # select data within historical period
-
-# write.csv(clean_mfo, paste(path, "Field_Observations/clean_mfo.csv", sep = ""))
-```
-
-## Daily field observations (dfo)
-```{r}
-dfo <- read.csv("C:/Users/DELL/Downloads/Meterorological_Data/Ejemplo_Resolucion_Diaria/30_temperature.csv", sep = ";")
-
-colnames(dfo) <- c("codigo", "year", "month", "day", "value") # Rename columns
-
-clean_dfo <- inner_join(dfo, filtered_stations, by = "codigo") %>% # select data only from filtered stations
-  select(codigo, year, month, day, value) %>%
-  filter(year >= 1970) %>% # select data within historical period
-  filter(year <= 2006) # select data within historical period
-```
-
-**no daily data within historical period...**
-
-
-# Notes for further work
-
-Once Linaria is working, if previous query is too heavy, and extra filtering step could be to check which stations measure any of the desired variables, and discard those stations where no data about temperature is recorded. If these are a lot of stations the query should be much easier to run. 

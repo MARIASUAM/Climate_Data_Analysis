@@ -24,21 +24,46 @@ path <- "D:/Maria/Proyectos/ECOPOTENTIAL_FUTURE_PROJECTIONS/" # María
 
 # Description
 
-Once models are compared with each other to assess spread and uncertainty (see "Model intercomparison.Rmd"), modelled data should be compared with field observations to assess model performance/model error. Field observations data will be downloaded from Linaria database. Documentation of this process (selection of stations, variables, queries, filters,...) can be found in "Field_Data.Rmd". 
+Once models are compared with each other to assess spread and uncertainty (see "Model intercomparison.Rmd"), modelled data should be compared with field observations to assess model performance/model error. Field observations were downloaded from Linaria database. Documentation of this process (selection of stations, variables, queries, filters,...) can be found in "Field_Data.Rmd". 
 
-Once field observations are downloaded, modelled and field data can be compared. Although they are not downloaded yet, I start preparing the code for the comparison in further sections with a test dataset. Since several variables have been calculated (yearmean, season mean, month mean, day min, day max), several sections will be needed. At the moment, since the test dataset refers to monthly means, analysis is done for this case only. 
-
-For notes on how such comparison should be done see "Chapter 16. Assessing Model Performance" (Ecological Forecasting, M. Dietze). At minimum, calculate RMSE, correlation, bias and ratio between standard deviations.
+Once field observations are downloaded, modelled and field data can be compared. For notes on how such comparison should be done see "Chapter 16. Assessing Model Performance" (Ecological Forecasting, M. Dietze). At minimum, calculate RMSE, correlation, bias and ratio between standard deviations.
 
 # Extract pixels indexes where there are stations
 
-We select only the stations where we know some variables are being measured. As "Field_Data.Rmd" advances, *this list could be modified, be careful*
+We select only the stations where we know some variables are being measured during the historical period (hist_stations). In the file "filtered_stations", coming from a previous query (see "Field_Data.Rmd") we have the coordinates of the stations.
 
-Stations:
+All stations:
 ```{r}
-my_stations <- "filtered_stations.csv"
-my_stations <- read.csv(paste(path, "Field_Observations/", my_stations, sep = ""), sep = ",")
+filt_stations <- "filtered_stations.csv"
+filt_stations <- read.csv(paste(path, "Field_Observations/", filt_stations, sep = ""), sep = ",")
+filt_stations <- filt_stations %>%
+  select(cli_estacion_id, codigo, nombre, long, lat)
 ```
+
+Hist stations
+```{r}
+hist_stations <- "hist_stations.csv"
+hist_stations <- read.csv(paste(path, "Field_Observations/", hist_stations, sep = ""), sep = ",")
+```
+
+Hist stations coordinates
+```{r}
+stations <- left_join(hist_stations, filt_stations, by = "cli_estacion_id")
+```
+
+There are inconsistencies, since 3 stations (50, 267, 408) in "hist_stations" are not in "filtered_stations" and therefore we do not have their coordinates. But let's see if these stations record data and we have not discard them due to nonsense data, because otherwise it is not a problem to not have their coordinates. 
+
+```{r}
+folder <- "Field_Observations/" # María
+calc_dmean <- read.csv(paste(path, folder, "calc_dmean.csv", sep = ""), sep = ",")
+calc_dmean <- calc_dmean %>%
+  select(cli_estacion_id, year, month, day, dmean) %>%
+  mutate(cli_estacion_id = as.factor(cli_estacion_id))
+
+im_stations <- data.frame(unique(calc_dmean$cli_estacion_id))
+```
+
+im_stations does not contain stations 50, 267 or 408, so it is not a problem that we do not have their coordinates.
 
 Modelled data - All models have the same long and lat, I open a random one:
 ```{r}
@@ -52,22 +77,20 @@ lon <- ncvar_get(cnrm_nc, "lon")
 lat <- ncvar_get(cnrm_nc, "lat", verbose = F)
 
 # nc files have associated indexes for latitude and longitud to identy each pixel, so each station will have associated the indexes of the pixel where it stands
-my_stations$pixel_lat_index <- c()
-my_stations$pixel_lon_index <- c()
+stations$pixel_lat_index <- c()
+stations$pixel_lon_index <- c()
 
-for (i in 1:length(my_stations$cli_estacion_id)) {
-  lat_value <- my_stations$lat[i]
-  lon_value <- my_stations$lon[i]
+for (i in 1:length(stations$cli_estacion_id)) {
+  lat_value <- stations$lat[i]
+  lon_value <- stations$lon[i]
   
-  my_stations$pixel_index_lat[i] <- which.min(abs(lat - lat_value))
-  my_stations$pixel_index_lon[i] <- which.min(abs(lon - lon_value))
+  stations$pixel_index_lat[i] <- which.min(abs(lat - lat_value)) # índice más pequeño del vector que forma la diferencia absoluta entre lat y lat_value - es decir, busca dónde está el valor más cercano a 0 y dá el índice de ese elemento.
+  stations$pixel_index_lon[i] <- which.min(abs(lon - lon_value)) # no recuerdo de donde sale esto...
 }
 ```
 
-# Generate data frame containing time series of all stations
-
-Test dataset of field observations are **monthly** means, so I do the analysis for the monthly means, but same analysis should be performed for all other metrics.
-
+# Generate data frames for each (daymin, daymax, monthmean, seasonmean, yearmean) containing time series of all stations
+ 
 *Note* should this df has the mean of the 5 models or the date of the 5 models separately? Options:
 
   - df containing the 5 models (then an extra column indicating the model would be necessary, or each model data would be in one column), 
@@ -75,6 +98,8 @@ Test dataset of field observations are **monthly** means, so I do the analysis f
   - df containing the average of the 5 models (then such average should be calculated, and maybe an extra parameter indicating variability should be included)
 
 I decide to construct the df containing one column per model + mean + sd among values, so that when I include the observations as an extra column comparison can be easily done for each model individually or for the mean of them.
+
+## Monthly data
 
 Load modelled data:
 ```{r}
@@ -98,13 +123,13 @@ Generate models time series
 ```{r}
 timeseries <- data.frame()
 
-for (i in 1:length(my_stations$cli_estacion_id)) {
+for (i in 1:length(stations$cli_estacion_id)) {
   # Collect "tas" time series for each model
-  tas_cnrm <- nc.get.var.subset.by.axes(cnrm_nc, "tas", axis.indices = list(X = my_stations$pixel_index_lon[i], Y = my_stations$pixel_index_lat[i]))
-  tas_ichec <- nc.get.var.subset.by.axes(ichec_nc, "tas", axis.indices = list(X = my_stations$pixel_index_lon[i], Y = my_stations$pixel_index_lat[i]))
-  tas_ipsl <- nc.get.var.subset.by.axes(ipsl_nc, "tas", axis.indices = list(X = my_stations$pixel_index_lon[i], Y = my_stations$pixel_index_lat[i]))
-  tas_mohc <- nc.get.var.subset.by.axes(mohc_nc, "tas", axis.indices = list(X = my_stations$pixel_index_lon[i], Y = my_stations$pixel_index_lat[i]))
-  tas_mpi <- nc.get.var.subset.by.axes(mpi_nc, "tas", axis.indices = list(X = my_stations$pixel_index_lon[i], Y = my_stations$pixel_index_lat[i]))
+  tas_cnrm <- nc.get.var.subset.by.axes(cnrm_nc, "tas", axis.indices = list(X = stations$pixel_index_lon[i], Y = stations$pixel_index_lat[i]))
+  tas_ichec <- nc.get.var.subset.by.axes(ichec_nc, "tas", axis.indices = list(X = stations$pixel_index_lon[i], Y = stations$pixel_index_lat[i]))
+  tas_ipsl <- nc.get.var.subset.by.axes(ipsl_nc, "tas", axis.indices = list(X = stations$pixel_index_lon[i], Y = stations$pixel_index_lat[i]))
+  tas_mohc <- nc.get.var.subset.by.axes(mohc_nc, "tas", axis.indices = list(X = stations$pixel_index_lon[i], Y = stations$pixel_index_lat[i]))
+  tas_mpi <- nc.get.var.subset.by.axes(mpi_nc, "tas", axis.indices = list(X = stations$pixel_index_lon[i], Y = stations$pixel_index_lat[i]))
   
   # Collect "time" time series for each model - although all are monthly means, apparently the time point to which the data is linked is not the same for all models. However, they do refer to the same month and year, so only one time timeseries will be used
   tas_cnrm_time <- nc.get.time.series(cnrm_nc, v = "tas",
@@ -128,7 +153,8 @@ for (i in 1:length(my_stations$cli_estacion_id)) {
                      tas_mohc = as.vector(tas_mohc),
                      # time_mpi = tas_mpi_time,
                      tas_mpi = as.vector(tas_mpi),
-                     codigo = my_stations$codigo[i])
+                     cli_estacion_id = stations$cli_estacion_id[i],
+                     codigo = stations$codigo[i])
   
   timeseries <- rbind(timeseries, temp)
 }
@@ -140,59 +166,56 @@ timeseries <- timeseries %>%
   mutate(time_cnrm = as.Date(format(time_cnrm, "%Y-%m-%d"))) %>%
   mutate(year = as.integer(format(time_cnrm,"%Y"))) %>%
   mutate(month = as.integer(format(time_cnrm,"%m"))) %>%
-  select(codigo, time_cnrm, year, month, tas_cnrm, tas_ichec, tas_ipsl, tas_mohc, tas_mpi) %>%
-  mutate(codigo = as.character(codigo))
+  select(codigo, cli_estacion_id, time_cnrm, year, month, tas_cnrm, tas_ichec, tas_ipsl, tas_mohc, tas_mpi) %>%
+  mutate(codigo = as.character(codigo)) %>%
+  mutate(cli_estacion_id = as.factor(cli_estacion_id))
 ```
 
-Add field observations to time series dataframe
+## Add field observations to time series dataframe
 ```{r}
-clean_mfo <- read.csv(paste(path, "Field_Observations/clean_mfo.csv", sep = ""))
+monthly <- read.csv(paste(path, folder, "calc_mmean.csv", sep = ""))
 
-clean_mfo <- clean_mfo %>%
-  mutate(obs_value = value) %>%
-  select(codigo, year, month, obs_value) %>%
-  mutate(codigo = as.character(codigo))
+monthly <- monthly %>%
+  mutate(obs_value = mmean) %>%
+  select(cli_estacion_id, year, month, obs_value) %>%
+  mutate(cli_estacion_id = as.factor(cli_estacion_id)) 
 
-full_ts <- inner_join(clean_mfo, timeseries)
+month_ts <- inner_join(monthly, timeseries)
 ```
 
 Add metrics
 ```{r}
-full_ts <- full_ts %>%
+month_ts <- month_ts %>%
   mutate(modelled_mean = ((tas_cnrm + tas_ichec + tas_ipsl + tas_mohc + tas_mpi) / 5)) %>%
   mutate(modelled_sd = (sqrt((((tas_cnrm - modelled_mean) ^ 2) + ((tas_ichec - modelled_mean) ^ 2) + ((tas_ipsl - modelled_mean) ^ 2) + ((tas_mohc - modelled_mean) ^ 2) + ((tas_mpi - modelled_mean) ^ 2)) / 4)))
 ```
 
-# Plotting - qualitative exploration
+Plotting - qualitative exploration
 
 Modelled vs observations: mean of models
 ```{r}
-ggplot(full_ts, aes(x = modelled_mean, y = obs_value, colour = codigo)) +
+ggplot(month_ts, aes(x = modelled_mean, y = obs_value, colour = codigo)) +
   geom_point() + 
   xlab("Predicted value") + ylab("Observed value") + 
   theme(legend.position="none") +
   ggtitle("Comparison of monthly mean temperature predicted (mean across models) and observed values") +
-  scale_y_continuous(limits=c(-10, 40)) +
-  scale_x_continuous(limits=c(-10, 40)) +
   geom_abline(slope = 1, intercept = 0)
 ```
 
 Modelled vs observations: one model
 ```{r}
-ggplot(full_ts, aes(x = tas_cnrm, y = obs_value, colour = codigo)) +
+ggplot(month_ts, aes(x = tas_cnrm, y = obs_value, colour = codigo)) +
   geom_point() + 
   xlab("Predicted value") + ylab("Observed value") + 
   theme(legend.position="none") +
   ggtitle("Comparison of monthly mean temperature predicted by model CNRM and observed") +
-  scale_y_continuous(limits=c(-10, 40)) +
-  scale_x_continuous(limits=c(-10, 40)) +
   geom_abline(slope = 1, intercept = 0)
 ```
 
 Modelled vs observations: one-station time series
 ```{r}
-selection <- full_ts %>%
-  filter(codigo == "5510A") %>%
+selection <- month_ts %>%
+  filter(codigo == "E190") %>%
   select(time_cnrm, obs_value, modelled_mean) %>%
   melt(id = c("time_cnrm"))
 
@@ -200,34 +223,36 @@ ggplot(data = selection, aes(x = time_cnrm, y = value, colour = variable)) +
   geom_line() + 
   xlab("Year") + ylab("Monthly mean temperature (ºC)") + 
   theme() +
-  ggtitle("Time series for station 5510A: observed and modelled") +
+  ggtitle("Time series for station E190: observed and modelled") +
   scale_y_continuous(limits=c(0, 30))
 ```
 
 Modelled vs observations: all-stations time series all models and mean
 ```{r}
-reshaped_ts <- melt(full_ts, id = c("codigo", "year", "month", "time_cnrm")) %>%
-  filter(variable != "modelled_sd")
+reshaped_ts <- melt(month_ts, id = c("codigo", "year", "month", "time_cnrm")) %>%
+  filter(variable != "modelled_sd") %>%
+  filter(variable != "cli_estacion_id") %>%
+  mutate(codigo = as.factor(codigo)) %>%
+  mutate(value = as.numeric(value))
   
-ggplot(reshaped_ts, aes(x = time_cnrm, y = value, colour = variable)) +
-  geom_line() +
+ggplot(reshaped_ts, aes(x = time_cnrm, y = value)) +  **## ESTA GRAFICA NO SALEEEE**
+  geom_line(colour = variable) +
   xlab("Date") + ylab("Temperature (ºC)") +
-  theme_classic()
-  
+  theme_classic() 
 ```
 
-## Quantitative analysis
+Quantitative analysis
 
 Following "Chapter 16. Assessing Model Performance" (Ecological Forecasting, M. Dietze). 
 
 Correlations between observations and predicted values: per model and against modelled mean
 ```{r}
-a <- cor.test(full_ts$obs_value, full_ts$tas_cnrm)
-b <- cor.test(full_ts$obs_value, full_ts$tas_ichec)
-c <- cor.test(full_ts$obs_value, full_ts$tas_ipsl)
-d <- cor.test(full_ts$obs_value, full_ts$tas_mohc)
-e <- cor.test(full_ts$obs_value, full_ts$tas_mpi)
-f <- cor.test(full_ts$obs_value, full_ts$modelled_mean)         
+a <- cor.test(month_ts$obs_value, month_ts$tas_cnrm)
+b <- cor.test(month_ts$obs_value, month_ts$tas_ichec)
+c <- cor.test(month_ts$obs_value, month_ts$tas_ipsl)
+d <- cor.test(month_ts$obs_value, month_ts$tas_mohc)
+e <- cor.test(month_ts$obs_value, month_ts$tas_mpi)
+f <- cor.test(month_ts$obs_value, month_ts$modelled_mean)         
 
 names <- c("CNRM", "ICHEC", "IPSL", "MOHC", "MPI", "Models mean")
 correlations <- c(a$estimate, b$estimate, c$estimate, d$estimate, e$estimate, f$estimate)
@@ -251,9 +276,9 @@ Root Mean Square Error (RMSE), Root Square, Bias and SD ratio
 *Calculated only for the mean of all five models, not for each model independently*
 
 ```{r}
-meanofobservationdata <- mean(full_ts$obs_value)
+meanofobservationdata <- mean(month_ts$obs_value)
 
-rmse <- full_ts %>%
+rmse <- month_ts %>%
   select(codigo, year, month, obs_value, modelled_mean, modelled_sd) %>%
   mutate(sq_error = (modelled_mean - obs_value) ^ 2) %>%
   mutate(deviationfromdata = (obs_value - meanofobservationdata) ^ 2)
@@ -276,12 +301,12 @@ sd_ratio <- sd(rmse$modelled_mean) / sd(rmse$obs_value)
 sd_ratio
 ```
 
-The models have slightly more variability than what it is observed, they predict a little more fluctuations than the ones which actually occur. 
+# INTERPRET RESULTS - TO DO
 
 
 
 
-
+**Test dataset of field observations are **monthly** means, so I do the analysis for the monthly means, but same analysis should be performed for all other metrics.**
 
 
 
